@@ -6,6 +6,7 @@ import React, {
   useRef,
   useState
 } from "react";
+import { db, onValue, ref, remove, set, update } from "../lib/firebase";
 import {
   ComposableMap,
   Geographies,
@@ -42,9 +43,6 @@ type DossierTab = "genel" | "iletisim" | "spor";
 
 // Notes
 type Note = { id: string; countryCode: string; countryName: string; title: string; body: string; date: string };
-const NOTES_KEY = "fig-v3-notes";
-const loadNotes = (): Note[] => { try { return JSON.parse(localStorage.getItem(NOTES_KEY) ?? "[]"); } catch { return []; } };
-const saveNotes = (notes: Note[]) => localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
 
 // Overrides — status + editable texts
 type CountryOverride = {
@@ -53,9 +51,6 @@ type CountryOverride = {
   entryChannel?: string;
   redLine?: string;
 };
-const OVERRIDES_KEY = "fig-v3-overrides";
-const loadOverrides = (): Record<string, CountryOverride> => { try { return JSON.parse(localStorage.getItem(OVERRIDES_KEY) ?? "{}"); } catch { return {}; } };
-const saveOverrides = (o: Record<string, CountryOverride>) => localStorage.setItem(OVERRIDES_KEY, JSON.stringify(o));
 
 const officialDirectory = federationDirectoryData as FederationDirectoryRecord[];
 
@@ -252,16 +247,32 @@ export const StrategyApp = () => {
   const [mapPos, setMapPos] = useState<{ coordinates: [number, number]; zoom: number }>({ coordinates: [10, 12], zoom: 1 });
   const mapRef = useRef<HTMLDivElement>(null);
 
-  // Notes
-  const [notes, setNotes] = useState<Note[]>(loadNotes);
+  // Notes — synced from Firebase
+  const [notes, setNotes] = useState<Note[]>([]);
   const [noteTitle, setNoteTitle] = useState("");
   const [noteBody, setNoteBody] = useState("");
 
-  // Overrides (editable status + texts)
-  const [overrides, setOverrides] = useState<Record<string, CountryOverride>>(loadOverrides);
+  // Overrides — synced from Firebase
+  const [overrides, setOverrides] = useState<Record<string, CountryOverride>>({});
 
-  useEffect(() => { saveNotes(notes); }, [notes]);
-  useEffect(() => { saveOverrides(overrides); }, [overrides]);
+  // Firebase listeners
+  useEffect(() => {
+    const unsub = onValue(ref(db, "fig-v3/notes"), snap => {
+      const val = snap.val() as Record<string, Note> | null;
+      if (!val) { setNotes([]); return; }
+      const arr = Object.values(val).sort((a, b) => b.id.localeCompare(a.id));
+      setNotes(arr);
+    });
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    const unsub = onValue(ref(db, "fig-v3/overrides"), snap => {
+      const val = snap.val() as Record<string, CountryOverride> | null;
+      setOverrides(val ?? {});
+    });
+    return unsub;
+  }, []);
 
   // Fix map preserveAspectRatio
   useEffect(() => {
@@ -275,12 +286,9 @@ export const StrategyApp = () => {
     return () => clearTimeout(t);
   }, [view]);
 
-  // Helper to update override for a country
+  // Helper to update override for a country (writes to Firebase)
   const setOverride = (code: string, patch: Partial<CountryOverride>) => {
-    setOverrides(cur => {
-      const next = { ...cur, [code]: { ...(cur[code] ?? {}), ...patch } };
-      return next;
-    });
+    update(ref(db, `fig-v3/overrides/${code}`), patch);
   };
 
   // Merged country with overrides applied
@@ -347,11 +355,11 @@ export const StrategyApp = () => {
       title: t, body: b,
       date: new Intl.DateTimeFormat("tr-TR", { day: "2-digit", month: "short", year: "numeric" }).format(new Date())
     };
-    setNotes(cur => [note, ...cur]);
+    set(ref(db, `fig-v3/notes/${note.id}`), note);
     setNoteTitle(""); setNoteBody("");
   };
 
-  const deleteNote = (id: string) => setNotes(cur => cur.filter(n => n.id !== id));
+  const deleteNote = (id: string) => remove(ref(db, `fig-v3/notes/${id}`));
   const countryNotes = notes.filter(n => n.countryCode === selectedCode);
 
   const majority = Math.ceil(totals.total / 2) + 1;

@@ -42,7 +42,7 @@ type FilterValue<T extends string> = T | "all";
 type DossierTab = "genel" | "iletisim" | "spor";
 
 // Notes
-type Note = { id: string; countryCode: string; countryName: string; title: string; body: string; date: string };
+type Note = { id: string; countryCode: string; countryName: string; title: string; body: string; date: string; completed?: boolean };
 
 // Overrides — status + editable texts
 type CountryOverride = {
@@ -99,6 +99,18 @@ const IcEdit = () => (
 const IcCheck = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
     <polyline points="20 6 9 17 4 12"/>
+  </svg>
+);
+const IcCheckCircle = ({ done }: { done?: boolean }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+    style={{ color: done ? "var(--green)" : "var(--muted)" }}>
+    <circle cx="12" cy="12" r="10"/>
+    {done && <polyline points="9 12 11 14 15 10"/>}
+  </svg>
+);
+const IcPlus = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
   </svg>
 );
 
@@ -251,6 +263,7 @@ export const StrategyApp = () => {
   const [notes, setNotes] = useState<Note[]>([]);
   const [noteTitle, setNoteTitle] = useState("");
   const [noteBody, setNoteBody] = useState("");
+  const [showNoteForm, setShowNoteForm] = useState(false);
 
   // Overrides — synced from Firebase
   const [overrides, setOverrides] = useState<Record<string, CountryOverride>>({});
@@ -274,16 +287,22 @@ export const StrategyApp = () => {
     return unsub;
   }, []);
 
-  // Fix map preserveAspectRatio
+  // Fix map preserveAspectRatio — retry until SVG renders
   useEffect(() => {
     if (view !== "map") return;
+    let tries = 0;
     const fix = () => {
       const svg = mapRef.current?.querySelector("svg");
-      if (svg) svg.setAttribute("preserveAspectRatio", "xMidYMid slice");
+      if (svg) {
+        svg.setAttribute("preserveAspectRatio", "xMidYMid slice");
+        svg.style.width = "100%";
+        svg.style.height = "100%";
+      } else if (tries < 20) {
+        tries++;
+        setTimeout(fix, 50);
+      }
     };
     fix();
-    const t = setTimeout(fix, 100);
-    return () => clearTimeout(t);
   }, [view]);
 
   // Helper to update override for a country (writes to Firebase)
@@ -360,6 +379,7 @@ export const StrategyApp = () => {
   };
 
   const deleteNote = (id: string) => remove(ref(db, `fig-v3/notes/${id}`));
+  const toggleNoteComplete = (id: string, completed: boolean) => update(ref(db, `fig-v3/notes/${id}`), { completed });
   const countryNotes = notes.filter(n => n.countryCode === selectedCode);
 
   const majority = Math.ceil(totals.total / 2) + 1;
@@ -586,7 +606,9 @@ export const StrategyApp = () => {
         {view === "notes" && (
           <div className="tab-scroll">
             <section className="section">
-              <h2 className="section-title">Yeni Not</h2>
+              <div className="notes-header-row">
+                <h2 className="section-title">Yeni Not</h2>
+              </div>
               <div className="note-country-selector">
                 <select
                   className="note-select"
@@ -610,22 +632,49 @@ export const StrategyApp = () => {
             {notes.length === 0 ? (
               <div className="empty-state">Henüz not yok. Federasyon seç ve not ekle.</div>
             ) : (
-              <section className="section">
-                <h2 className="section-title">Tüm Notlar <span className="note-count">{notes.length}</span></h2>
-                {notes.map(n => (
-                  <div key={n.id} className="note-card">
-                    <div className="note-card-header">
-                      <span className="note-card-country">{n.countryName} · {n.countryCode}</span>
-                      <div style={{ display:"flex", gap:"8px", alignItems:"center" }}>
-                        <span className="note-card-date">{n.date}</span>
-                        <button className="note-delete" type="button" onClick={() => deleteNote(n.id)}><IcX /></button>
+              <>
+                {notes.filter(n => !n.completed).length > 0 && (
+                  <section className="section">
+                    <h2 className="section-title">Aktif <span className="note-count">{notes.filter(n => !n.completed).length}</span></h2>
+                    {notes.filter(n => !n.completed).map(n => (
+                      <div key={n.id} className="note-card">
+                        <div className="note-card-header">
+                          <button type="button" className="note-complete-btn" onClick={() => toggleNoteComplete(n.id, true)}>
+                            <IcCheckCircle done={false} />
+                          </button>
+                          <span className="note-card-country">{n.countryName} · {n.countryCode}</span>
+                          <div style={{ display:"flex", gap:"8px", alignItems:"center", marginLeft:"auto" }}>
+                            <span className="note-card-date">{n.date}</span>
+                            <button className="note-delete" type="button" onClick={() => deleteNote(n.id)}><IcX /></button>
+                          </div>
+                        </div>
+                        <div className="note-card-title">{n.title}</div>
+                        <div className="note-card-body">{n.body}</div>
                       </div>
-                    </div>
-                    <div className="note-card-title">{n.title}</div>
-                    <div className="note-card-body">{n.body}</div>
-                  </div>
-                ))}
-              </section>
+                    ))}
+                  </section>
+                )}
+                {notes.filter(n => n.completed).length > 0 && (
+                  <section className="section">
+                    <h2 className="section-title" style={{ color:"var(--muted)" }}>Tamamlandı <span className="note-count">{notes.filter(n => n.completed).length}</span></h2>
+                    {notes.filter(n => n.completed).map(n => (
+                      <div key={n.id} className="note-card note-card-done">
+                        <div className="note-card-header">
+                          <button type="button" className="note-complete-btn" onClick={() => toggleNoteComplete(n.id, false)}>
+                            <IcCheckCircle done={true} />
+                          </button>
+                          <span className="note-card-country" style={{ opacity:0.5 }}>{n.countryName} · {n.countryCode}</span>
+                          <div style={{ display:"flex", gap:"8px", alignItems:"center", marginLeft:"auto" }}>
+                            <span className="note-card-date">{n.date}</span>
+                            <button className="note-delete" type="button" onClick={() => deleteNote(n.id)}><IcX /></button>
+                          </div>
+                        </div>
+                        <div className="note-card-title note-title-done">{n.title}</div>
+                      </div>
+                    ))}
+                  </section>
+                )}
+              </>
             )}
           </div>
         )}
@@ -743,26 +792,39 @@ export const StrategyApp = () => {
 
                   {/* Notes in strategy tab */}
                   <div className="ds-notes-header">
-                    <span className="ds-block-label">Notlar</span>
-                    <button type="button" className="ds-notes-all-btn" onClick={() => { setSheet(null); setView("notes"); }}>
-                      Tüm notlar →
-                    </button>
+                    <span className="ds-block-label">Notlar {countryNotes.length > 0 && <span className="note-count">{countryNotes.length}</span>}</span>
+                    <div style={{ display:"flex", gap:8 }}>
+                      <button type="button" className="ds-notes-add-btn" onClick={() => setShowNoteForm(v => !v)}>
+                        <IcPlus /> Not Ekle
+                      </button>
+                      <button type="button" className="ds-notes-all-btn" onClick={() => { setSheet(null); setView("notes"); }}>
+                        Tümü →
+                      </button>
+                    </div>
                   </div>
-                  <form className="note-form" onSubmit={addNote}>
-                    <input className="note-input" placeholder="Not başlığı" value={noteTitle} onChange={e => setNoteTitle(e.target.value)} />
-                    <textarea className="note-textarea" placeholder="Not ekle…" rows={3} value={noteBody} onChange={e => setNoteBody(e.target.value)} />
-                    <button className="note-submit" type="submit">Kaydet</button>
-                  </form>
+                  {showNoteForm && (
+                    <form className="note-form" onSubmit={e => { addNote(e); setShowNoteForm(false); }}>
+                      <input className="note-input" placeholder="Not başlığı" value={noteTitle} onChange={e => setNoteTitle(e.target.value)} required />
+                      <textarea className="note-textarea" placeholder="Not içeriği…" rows={3} value={noteBody} onChange={e => setNoteBody(e.target.value)} required />
+                      <div style={{ display:"flex", gap:8 }}>
+                        <button className="note-submit" type="submit">Kaydet</button>
+                        <button className="note-cancel" type="button" onClick={() => { setShowNoteForm(false); setNoteTitle(""); setNoteBody(""); }}>İptal</button>
+                      </div>
+                    </form>
+                  )}
                   {countryNotes.map(n => (
-                    <div key={n.id} className="note-card" style={{ marginTop: 8 }}>
+                    <div key={n.id} className={`note-card ${n.completed ? "note-card-done" : ""}`} style={{ marginTop: 8 }}>
                       <div className="note-card-header">
-                        <span className="note-card-title">{n.title}</span>
-                        <div style={{ display:"flex", gap:"8px", alignItems:"center" }}>
+                        <button type="button" className="note-complete-btn" onClick={() => toggleNoteComplete(n.id, !n.completed)}>
+                          <IcCheckCircle done={n.completed} />
+                        </button>
+                        <span className={`note-card-title ${n.completed ? "note-title-done" : ""}`}>{n.title}</span>
+                        <div style={{ display:"flex", gap:"8px", alignItems:"center", marginLeft:"auto" }}>
                           <span className="note-card-date">{n.date}</span>
                           <button className="note-delete" type="button" onClick={() => deleteNote(n.id)}><IcX /></button>
                         </div>
                       </div>
-                      <div className="note-card-body">{n.body}</div>
+                      {!n.completed && <div className="note-card-body">{n.body}</div>}
                     </div>
                   ))}
                 </>

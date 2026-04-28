@@ -18,31 +18,36 @@ type DashboardMetric = {
 
 export const continentMeta: Record<
   ContinentCode,
-  { label: string; accent: string; description: string }
+  { label: string; accent: string; description: string; flag: string }
 > = {
   EG: {
     label: "Avrupa",
     accent: "#5da8ff",
+    flag: "🌍",
     description: "Teknik güven, yönetişim ciddiyeti ve organizasyon kalitesi belirleyici."
   },
   AGU: {
     label: "Asya",
     accent: "#2eb67d",
+    flag: "🌏",
     description: "İstikrar dili, kurumsal saygı ve teknoloji güveni öne çıkıyor."
   },
   UAG: {
     label: "Afrika",
     accent: "#ff8a57",
+    flag: "🌍",
     description: "Gelişim fonu, ekipman erişimi ve eğitim teslimatı kritik."
   },
   PAGU: {
     label: "Amerika",
     accent: "#f1c95b",
+    flag: "🌎",
     description: "Sporcu görünürlüğü, yayın değeri ve şeffaf yönetim öne çıkıyor."
   },
   OGU: {
     label: "Okyanusya",
     accent: "#9e8dff",
+    flag: "🌏",
     description: "Uzaklık maliyeti, uzaktan eğitim ve küçük federasyon adaleti önemli."
   }
 };

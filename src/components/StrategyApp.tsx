@@ -1,4 +1,4 @@
-import {
+import React, {
   type FormEvent,
   useDeferredValue,
   useEffect,
@@ -13,8 +13,10 @@ import {
   ZoomableGroup
 } from "react-simple-maps";
 import worldGeoData from "world-atlas/countries-110m.json";
+import federationDirectoryData from "../data/federationDirectory.json";
 import { federationSeeds } from "../data/federationSeeds";
 import {
+  buildSportHighlights,
   buildStrategicSummary,
   continentMeta,
   primaryNeedLabel,
@@ -25,21 +27,37 @@ import {
   rankCountriesByUrgency,
   statusTone
 } from "../lib/strategy";
-import type { ContinentCode, FederationSeed, SupportStatus } from "../types";
+import type {
+  ContinentCode,
+  FederationDirectoryRecord,
+  FederationSeed,
+  SupportStatus
+} from "../types";
 
 // ── Types ─────────────────────────────────────────────────────────────
 type AppView = "dashboard" | "map" | "countries" | "notes";
 type Sheet = "dossier" | null;
 type FilterValue<T extends string> = T | "all";
+type DossierTab = "genel" | "iletisim" | "spor";
 
+// Notes
 type Note = { id: string; countryCode: string; countryName: string; title: string; body: string; date: string };
 const NOTES_KEY = "fig-v3-notes";
-const loadNotes = (): Note[] => {
-  try { return JSON.parse(localStorage.getItem(NOTES_KEY) ?? "[]"); } catch { return []; }
+const loadNotes = (): Note[] => { try { return JSON.parse(localStorage.getItem(NOTES_KEY) ?? "[]"); } catch { return []; } };
+const saveNotes = (notes: Note[]) => localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
+
+// Overrides — status + editable texts
+type CountryOverride = {
+  status?: SupportStatus;
+  assessment?: string;
+  entryChannel?: string;
+  redLine?: string;
 };
-const saveNotes = (notes: Note[]) => {
-  localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
-};
+const OVERRIDES_KEY = "fig-v3-overrides";
+const loadOverrides = (): Record<string, CountryOverride> => { try { return JSON.parse(localStorage.getItem(OVERRIDES_KEY) ?? "{}"); } catch { return {}; } };
+const saveOverrides = (o: Record<string, CountryOverride>) => localStorage.setItem(OVERRIDES_KEY, JSON.stringify(o));
+
+const officialDirectory = federationDirectoryData as FederationDirectoryRecord[];
 
 // ── Icons ─────────────────────────────────────────────────────────────
 const IcGrid = () => (
@@ -64,7 +82,7 @@ const IcNote = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
     <polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/>
-    <line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
+    <line x1="16" y1="17" x2="8" y2="17"/>
   </svg>
 );
 const IcX = () => (
@@ -75,6 +93,17 @@ const IcX = () => (
 const IcChevronRight = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <polyline points="9 18 15 12 9 6"/>
+  </svg>
+);
+const IcEdit = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+  </svg>
+);
+const IcCheck = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="20 6 9 17 4 12"/>
   </svg>
 );
 
@@ -98,7 +127,7 @@ const MAP_COLOR: Record<SupportStatus, string> = {
   resistant: "#F87171"
 };
 
-// Country code → ISO numeric map (sample subset for coloring)
+// Country code → ISO numeric
 const CODE_TO_NUMERIC: Record<string, string> = {
   TUR:"792",GER:"276",FRA:"250",USA:"840",CHN:"156",JPN:"392",BRA:"076",
   AUS:"036",EGY:"818",KEN:"404",RSA:"710",IND:"356",RUS:"643",UKR:"804",
@@ -120,17 +149,100 @@ const CODE_TO_NUMERIC: Record<string, string> = {
   TRI:"780",GUY:"328",SUR:"740",BAR:"052",
 };
 
-// ── Main Component ─────────────────────────────────────────────────────
+// ── Editable text block ─────────────────────────────────────────────────
+const EditableBlock = ({
+  label, value, onSave, warn = false
+}: { label: string; value: string; onSave: (v: string) => void; warn?: boolean }) => {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+
+  const save = () => {
+    onSave(draft.trim() || value);
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <div className={`ds-block ${warn ? "ds-block-warn" : ""}`}>
+        <div className="ds-block-label">{label}</div>
+        <textarea
+          className="edit-textarea"
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          rows={4}
+          autoFocus
+        />
+        <div className="edit-actions">
+          <button type="button" className="edit-save" onClick={save}><IcCheck /> Kaydet</button>
+          <button type="button" className="edit-cancel" onClick={() => { setDraft(value); setEditing(false); }}>İptal</button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className={`ds-block ${warn ? "ds-block-warn" : ""}`}>
+      <div className="ds-block-label-row">
+        <span className="ds-block-label">{label}</span>
+        <button type="button" className="edit-btn" onClick={() => { setDraft(value); setEditing(true); }}><IcEdit /></button>
+      </div>
+      <div className="ds-block-text">{value}</div>
+    </div>
+  );
+};
+
+// ── Password ──────────────────────────────────────────────────────────
+const PASS = "SuatCelen";
+const SESSION_KEY = "fig-v3-auth";
+
+const LoginScreen = ({ onLogin }: { onLogin: () => void }) => {
+  const [value, setValue] = useState("");
+  const [error, setError] = useState(false);
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    if (value === PASS) { sessionStorage.setItem(SESSION_KEY, "1"); onLogin(); }
+    else { setError(true); setTimeout(() => setError(false), 2000); }
+  };
+  return (
+    <div className="login-screen">
+      <div className="login-logo">FIG Seçim Operasyonu</div>
+      <h1 className="login-title">Suat Çelen<br />Strateji Odası</h1>
+      <p className="login-sub">Giriş yapmak için şifreyi girin</p>
+      <form className="login-form" onSubmit={submit}>
+        <input
+          className="login-input"
+          type="password"
+          placeholder="••••••••••"
+          value={value}
+          onChange={e => setValue(e.target.value)}
+          autoComplete="current-password"
+          autoFocus
+        />
+        {error && <div className="login-error">Hatalı şifre, tekrar deneyin.</div>}
+        <button className="login-btn" type="submit">Giriş Yap</button>
+      </form>
+    </div>
+  );
+};
+
+// ── Ana Bileşen ────────────────────────────────────────────────────────
 export const StrategyApp = () => {
+  const [authed, setAuthed] = useState(() => sessionStorage.getItem(SESSION_KEY) === "1");
+  if (!authed) return <LoginScreen onLogin={() => setAuthed(true)} />;
   const ranked = useMemo(() => rankCountriesByUrgency(federationSeeds), []);
   const continentSummaries = useMemo(() => buildContinentSummaries(federationSeeds), []);
+  const directoryByCode = useMemo(() =>
+    Object.fromEntries(officialDirectory.map(r => [r.countryCode, r])) as Record<string, FederationDirectoryRecord>,
+    []
+  );
+  const seedByCode = useMemo(() => Object.fromEntries(ranked.map(c => [c.countryCode, c])), [ranked]);
 
   // Global state
   const [view, setView] = useState<AppView>("dashboard");
   const [sheet, setSheet] = useState<Sheet>(null);
   const [selectedCode, setSelectedCode] = useState(ranked[0].countryCode);
+  const [dossierTab, setDossierTab] = useState<DossierTab>("genel");
 
-  // Filters (countries tab)
+  // Filters
   const [statusFilter, setStatusFilter] = useState<FilterValue<SupportStatus>>("all");
   const [continentFilter, setContinentFilter] = useState<FilterValue<ContinentCode>>("all");
   const [search, setSearch] = useState("");
@@ -140,7 +252,18 @@ export const StrategyApp = () => {
   const [mapPos, setMapPos] = useState<{ coordinates: [number, number]; zoom: number }>({ coordinates: [10, 12], zoom: 1 });
   const mapRef = useRef<HTMLDivElement>(null);
 
-  // Fix SVG preserveAspectRatio when map tab is active
+  // Notes
+  const [notes, setNotes] = useState<Note[]>(loadNotes);
+  const [noteTitle, setNoteTitle] = useState("");
+  const [noteBody, setNoteBody] = useState("");
+
+  // Overrides (editable status + texts)
+  const [overrides, setOverrides] = useState<Record<string, CountryOverride>>(loadOverrides);
+
+  useEffect(() => { saveNotes(notes); }, [notes]);
+  useEffect(() => { saveOverrides(overrides); }, [overrides]);
+
+  // Fix map preserveAspectRatio
   useEffect(() => {
     if (view !== "map") return;
     const fix = () => {
@@ -152,46 +275,64 @@ export const StrategyApp = () => {
     return () => clearTimeout(t);
   }, [view]);
 
-  // Notes
-  const [notes, setNotes] = useState<Note[]>(loadNotes);
-  const [noteTitle, setNoteTitle] = useState("");
-  const [noteBody, setNoteBody] = useState("");
+  // Helper to update override for a country
+  const setOverride = (code: string, patch: Partial<CountryOverride>) => {
+    setOverrides(cur => {
+      const next = { ...cur, [code]: { ...(cur[code] ?? {}), ...patch } };
+      return next;
+    });
+  };
 
-  useEffect(() => { saveNotes(notes); }, [notes]);
+  // Merged country with overrides applied
+  const mergedSeed = useMemo(() => {
+    return ranked.map(c => {
+      const ov = overrides[c.countryCode];
+      if (!ov) return c;
+      return { ...c, status: ov.status ?? c.status };
+    });
+  }, [ranked, overrides]);
 
-  // Derived
-  const seedByCode = useMemo(() => Object.fromEntries(ranked.map(c => [c.countryCode, c])), [ranked]);
-  const selected = seedByCode[selectedCode] ?? ranked[0];
-  const tone = statusTone(selected.status);
+  const mergedByCode = useMemo(() => Object.fromEntries(mergedSeed.map(c => [c.countryCode, c])), [mergedSeed]);
 
-  const filtered = useMemo(() => ranked.filter(c => {
+  // Filtered list (uses merged status)
+  const filtered = useMemo(() => mergedSeed.filter(c => {
     if (statusFilter !== "all" && c.status !== statusFilter) return false;
     if (continentFilter !== "all" && c.continent !== continentFilter) return false;
     if (dSearch && ![c.countryName, c.countryCode, c.president, c.federationName].join(" ").toLowerCase().includes(dSearch)) return false;
     return true;
-  }), [ranked, statusFilter, continentFilter, dSearch]);
+  }), [mergedSeed, statusFilter, continentFilter, dSearch]);
 
-  // Vote totals
+  // Vote totals (from merged)
   const totals = useMemo(() => ({
-    supporter: federationSeeds.filter(c => c.status === "supporter").length,
-    watch: federationSeeds.filter(c => c.status === "watch").length,
-    persuadable: federationSeeds.filter(c => c.status === "persuadable").length,
-    resistant: federationSeeds.filter(c => c.status === "resistant").length,
-    total: federationSeeds.length,
-  }), []);
+    supporter: mergedSeed.filter(c => c.status === "supporter").length,
+    watch: mergedSeed.filter(c => c.status === "watch").length,
+    persuadable: mergedSeed.filter(c => c.status === "persuadable").length,
+    resistant: mergedSeed.filter(c => c.status === "resistant").length,
+    total: mergedSeed.length,
+  }), [mergedSeed]);
 
-  // ISO numeric lookup for map coloring
   const statusByNumeric = useMemo(() => {
     const map: Record<string, SupportStatus> = {};
-    for (const c of federationSeeds) {
+    for (const c of mergedSeed) {
       const num = CODE_TO_NUMERIC[c.countryCode];
       if (num) map[num] = c.status;
     }
     return map;
-  }, []);
+  }, [mergedSeed]);
+
+  const selected = mergedByCode[selectedCode] ?? mergedSeed[0];
+  const selectedDir = directoryByCode[selectedCode];
+  const selectedOv = overrides[selectedCode] ?? {};
+
+  const getAssessment = (c: FederationSeed) => overrides[c.countryCode]?.assessment ?? translateStrategicText(buildStrategicSummary(c));
+  const getEntryChannel = (c: FederationSeed) => overrides[c.countryCode]?.entryChannel ?? translateStrategicText((c.entryChannels ?? [])[0] ?? "");
+  const getRedLine = (c: FederationSeed) => overrides[c.countryCode]?.redLine ?? translateStrategicText((c.redLines ?? [])[0] ?? "");
+
+  const sportHighlights = useMemo(() => buildSportHighlights(selected).filter(Boolean), [selected]);
 
   const openDossier = (code: string) => {
     setSelectedCode(code);
+    setDossierTab("genel");
     setSheet("dossier");
   };
 
@@ -211,11 +352,20 @@ export const StrategyApp = () => {
   };
 
   const deleteNote = (id: string) => setNotes(cur => cur.filter(n => n.id !== id));
-
   const countryNotes = notes.filter(n => n.countryCode === selectedCode);
 
   const majority = Math.ceil(totals.total / 2) + 1;
-  const onTrack = totals.supporter;
+
+  // Continent summaries from merged data
+  const continentStats = useMemo(() => {
+    const map: Record<string, { total: number; supporter: number }> = {};
+    for (const c of mergedSeed) {
+      if (!map[c.continent]) map[c.continent] = { total: 0, supporter: 0 };
+      map[c.continent].total++;
+      if (c.status === "supporter") map[c.continent].supporter++;
+    }
+    return map;
+  }, [mergedSeed]);
 
   return (
     <div className="shell">
@@ -224,7 +374,7 @@ export const StrategyApp = () => {
         <div className="hdr-brand">
           <span className="hdr-eyebrow">FIG Seçim · Suat Çelen</span>
           <div className="hdr-votes">
-            <span className="hdr-vote-num" style={{ color: "#10D9A0" }}>{totals.supporter}</span>
+            <span className="hdr-vote-num">{totals.supporter}</span>
             <span className="hdr-vote-sep">/</span>
             <span className="hdr-vote-total">{majority}</span>
             <span className="hdr-vote-label">çoğunluk için</span>
@@ -233,7 +383,7 @@ export const StrategyApp = () => {
         <nav className="hdr-nav">
           {(["dashboard","map","countries","notes"] as AppView[]).map(v => {
             const labels: Record<AppView,string> = { dashboard:"Durum", map:"Harita", countries:"Federasyonlar", notes:"Notlar" };
-            const icons: Record<AppView, JSX.Element> = { dashboard:<IcGrid/>, map:<IcMap/>, countries:<IcGlobe/>, notes:<IcNote/> };
+            const icons: Record<AppView, React.ReactElement> = { dashboard:<IcGrid/>, map:<IcMap/>, countries:<IcGlobe/>, notes:<IcNote/> };
             return (
               <button key={v} className={`hdr-tab ${view===v?"active":""}`} onClick={() => setView(v)} type="button">
                 {icons[v]}{labels[v]}
@@ -247,17 +397,16 @@ export const StrategyApp = () => {
         {/* ══ DURUM PANELİ ══ */}
         {view === "dashboard" && (
           <div className="tab-scroll">
-            {/* Progress */}
             <section className="section">
               <h2 className="section-title">Oy Durumu</h2>
               <div className="vote-progress-card">
-                <div className="vote-big">{onTrack} <span>destekçi</span></div>
+                <div className="vote-big">{totals.supporter} <span>destekçi</span></div>
                 <div className="vote-goal">Hedef: {majority} · Toplam: {totals.total}</div>
                 <div className="progress-track">
                   <div className="progress-fill green" style={{ width: `${(totals.supporter/totals.total)*100}%` }} />
-                  <div className="progress-fill blue" style={{ width: `${(totals.persuadable/totals.total)*100}%` }} />
+                  <div className="progress-fill blue"  style={{ width: `${(totals.persuadable/totals.total)*100}%` }} />
                   <div className="progress-fill amber" style={{ width: `${(totals.watch/totals.total)*100}%` }} />
-                  <div className="progress-fill red" style={{ width: `${(totals.resistant/totals.total)*100}%` }} />
+                  <div className="progress-fill red"   style={{ width: `${(totals.resistant/totals.total)*100}%` }} />
                 </div>
                 <div className="vote-legend">
                   <span className="dot green"/><b>{totals.supporter}</b> Destekçi
@@ -268,12 +417,11 @@ export const StrategyApp = () => {
               </div>
             </section>
 
-            {/* Kıtalar */}
             <section className="section">
               <h2 className="section-title">Kıtalar</h2>
               {(["EG","AGU","UAG","PAGU","OGU"] as ContinentCode[]).map(code => {
                 const meta = continentMeta[code];
-                const s = continentSummaries[code];
+                const s = continentStats[code];
                 if (!s) return null;
                 const pct = s.total > 0 ? Math.round((s.supporter / s.total) * 100) : 0;
                 return (
@@ -297,24 +445,20 @@ export const StrategyApp = () => {
               })}
             </section>
 
-            {/* En Kritik */}
             <section className="section">
               <h2 className="section-title">Öncelikli Hedefler</h2>
-              {ranked.filter(c => c.status === "persuadable").slice(0, 8).map(c => {
-                const tone = statusTone(c.status);
-                return (
-                  <div key={c.countryCode} className="priority-row" onClick={() => openDossier(c.countryCode)}>
-                    <div className="priority-row-left">
-                      <span className={`badge ${STATUS_CSS[c.status]}`}>{STATUS_TR[c.status]}</span>
-                      <div>
-                        <div className="priority-name">{c.countryName}</div>
-                        <div className="priority-sub">{continentMeta[c.continent]?.label} · {primaryNeedLabel(c.primaryNeed)}</div>
-                      </div>
+              {mergedSeed.filter(c => c.status === "persuadable").slice(0, 8).map(c => (
+                <div key={c.countryCode} className="priority-row" onClick={() => openDossier(c.countryCode)}>
+                  <div className="priority-row-left">
+                    <span className={`badge ${STATUS_CSS[c.status]}`}>{STATUS_TR[c.status]}</span>
+                    <div>
+                      <div className="priority-name">{c.countryName}</div>
+                      <div className="priority-sub">{continentMeta[c.continent]?.label} · {primaryNeedLabel(c.primaryNeed)}</div>
                     </div>
-                    <div className="priority-score" style={{ color: tone.color }}>{c.priorityScore}</div>
                   </div>
-                );
-              })}
+                  <div className="priority-score" style={{ color: statusTone(c.status).color }}>{c.priorityScore}</div>
+                </div>
+              ))}
             </section>
           </div>
         )}
@@ -332,18 +476,18 @@ export const StrategyApp = () => {
                   {({ geographies }) => geographies.map(geo => {
                     const numericId = geo.id as string;
                     const status = statusByNumeric[numericId];
-                    const isSelected = status && federationSeeds.find(c => CODE_TO_NUMERIC[c.countryCode] === numericId)?.countryCode === selectedCode;
+                    const isSelected = federationSeeds.find(c => CODE_TO_NUMERIC[c.countryCode] === numericId)?.countryCode === selectedCode;
                     return (
                       <Geography
                         key={geo.rsmKey}
                         geography={geo}
                         onClick={() => {
                           const seed = federationSeeds.find(c => CODE_TO_NUMERIC[c.countryCode] === numericId);
-                          if (seed) { setSelectedCode(seed.countryCode); setSheet("dossier"); }
+                          if (seed) { setSelectedCode(seed.countryCode); setSheet("dossier"); setDossierTab("genel"); }
                         }}
                         style={{
                           default: { fill: status ? MAP_COLOR[status] : "#1C2A3A", stroke: "#0D1B2A", strokeWidth: 0.4, opacity: isSelected ? 1 : 0.85, outline: "none" },
-                          hover: { fill: status ? MAP_COLOR[status] : "#243447", stroke: "#38BDF8", strokeWidth: 0.8, opacity: 1, outline: "none", cursor: status ? "pointer" : "default" },
+                          hover:   { fill: status ? MAP_COLOR[status] : "#243447", stroke: "#38BDF8", strokeWidth: 0.8, opacity: 1, outline: "none", cursor: status ? "pointer" : "default" },
                           pressed: { fill: status ? MAP_COLOR[status] : "#1C2A3A", outline: "none" }
                         }}
                       />
@@ -353,7 +497,6 @@ export const StrategyApp = () => {
               </ZoomableGroup>
             </ComposableMap>
 
-            {/* Map legend */}
             <div className="map-legend">
               {(["supporter","persuadable","watch","resistant"] as SupportStatus[]).map(s => (
                 <div key={s} className="map-legend-item">
@@ -363,16 +506,14 @@ export const StrategyApp = () => {
               ))}
             </div>
 
-            {/* Map zoom */}
             <div className="map-zoom">
               <button type="button" onClick={() => setMapPos(p => ({ ...p, zoom: Math.min(p.zoom+0.8,5) }))}>+</button>
               <button type="button" onClick={() => setMapPos(p => ({ ...p, zoom: Math.max(p.zoom-0.8,1) }))}>−</button>
               <button type="button" onClick={() => setMapPos({ coordinates:[10,12], zoom:1 })}>↺</button>
             </div>
 
-            {/* Selected bar */}
             {sheet !== "dossier" && selected && (
-              <div className="map-bar" onClick={() => setSheet("dossier")}>
+              <div className="map-bar" onClick={() => { setDossierTab("genel"); setSheet("dossier"); }}>
                 <div>
                   <div className="map-bar-name">{selected.countryName} <span className="map-bar-code">{selected.countryCode}</span></div>
                   <div className="map-bar-sub">{STATUS_TR[selected.status]} · {continentMeta[selected.continent]?.label}</div>
@@ -386,7 +527,6 @@ export const StrategyApp = () => {
         {/* ══ FEDERASYONLAR ══ */}
         {view === "countries" && (
           <div className="tab-scroll">
-            {/* Search */}
             <div className="search-bar">
               <input
                 className="search-input"
@@ -396,7 +536,6 @@ export const StrategyApp = () => {
               />
             </div>
 
-            {/* Status pills */}
             <div className="filter-pills">
               {(["all","supporter","persuadable","watch","resistant"] as (FilterValue<SupportStatus>)[]).map(s => (
                 <button key={s} type="button" className={`pill ${statusFilter===s?"pill-active":""}`}
@@ -406,7 +545,6 @@ export const StrategyApp = () => {
               ))}
             </div>
 
-            {/* Continent pills */}
             <div className="filter-pills">
               <button type="button" className={`pill ${continentFilter==="all"?"pill-active":""}`} onClick={() => setContinentFilter("all")}>Tüm Kıtalar</button>
               {(["EG","AGU","UAG","PAGU","OGU"] as ContinentCode[]).map(code => (
@@ -418,7 +556,6 @@ export const StrategyApp = () => {
 
             <div className="list-count">{filtered.length} federasyon</div>
 
-            {/* Country list */}
             {filtered.map(c => (
               <div key={c.countryCode} className="country-card" onClick={() => openDossier(c.countryCode)}>
                 <div className="country-card-left">
@@ -450,7 +587,7 @@ export const StrategyApp = () => {
                 >
                   {ranked.map(c => (
                     <option key={c.countryCode} value={c.countryCode}>
-                      {c.countryName} ({c.countryCode}) — {STATUS_TR[c.status]}
+                      {c.countryName} ({c.countryCode}) — {STATUS_TR[mergedByCode[c.countryCode]?.status ?? c.status]}
                     </option>
                   ))}
                 </select>
@@ -473,7 +610,7 @@ export const StrategyApp = () => {
                       <span className="note-card-country">{n.countryName} · {n.countryCode}</span>
                       <div style={{ display:"flex", gap:"8px", alignItems:"center" }}>
                         <span className="note-card-date">{n.date}</span>
-                        <button className="note-delete" type="button" onClick={() => deleteNote(n.id)} aria-label="Notu sil"><IcX /></button>
+                        <button className="note-delete" type="button" onClick={() => deleteNote(n.id)}><IcX /></button>
                       </div>
                     </div>
                     <div className="note-card-title">{n.title}</div>
@@ -490,7 +627,7 @@ export const StrategyApp = () => {
       <nav className="bottom-nav">
         {(["dashboard","map","countries","notes"] as AppView[]).map(v => {
           const labels: Record<AppView,string> = { dashboard:"Durum", map:"Harita", countries:"Federasyonlar", notes:"Notlar" };
-          const icons: Record<AppView, JSX.Element> = { dashboard:<IcGrid/>, map:<IcMap/>, countries:<IcGlobe/>, notes:<IcNote/> };
+          const icons: Record<AppView, React.ReactElement> = { dashboard:<IcGrid/>, map:<IcMap/>, countries:<IcGlobe/>, notes:<IcNote/> };
           return (
             <button key={v} type="button" className={`nav-tab ${view===v?"active":""}`} onClick={() => { setView(v); setSheet(null); }}>
               <span className="nav-tab-icon">{icons[v]}</span>
@@ -501,7 +638,7 @@ export const StrategyApp = () => {
       </nav>
 
       {/* ── Dossier Sheet ── */}
-      {sheet === "dossier" && (
+      {sheet === "dossier" && selected && (
         <>
           <div className="sheet-backdrop" onClick={() => setSheet(null)} />
           <div className="dossier-sheet">
@@ -509,16 +646,27 @@ export const StrategyApp = () => {
 
             {/* Header */}
             <div className="ds-header">
-              <div>
+              <div style={{ minWidth:0, flex:1 }}>
                 <div className="ds-title">{selected.countryName}</div>
-                <div className="ds-meta">
-                  {continentMeta[selected.continent]?.label} · {selected.president}
-                </div>
+                <div className="ds-meta">{continentMeta[selected.continent]?.label} · {selected.president}</div>
               </div>
-              <div style={{ display:"flex", alignItems:"center", gap:"12px" }}>
-                <span className={`badge badge-lg ${STATUS_CSS[selected.status]}`}>{STATUS_TR[selected.status]}</span>
+              <div style={{ display:"flex", alignItems:"center", gap:"10px", flexShrink:0 }}>
                 <button type="button" className="sheet-x" onClick={() => setSheet(null)}><IcX /></button>
               </div>
+            </div>
+
+            {/* Status changer */}
+            <div className="ds-status-row">
+              {(["supporter","persuadable","watch","resistant"] as SupportStatus[]).map(s => (
+                <button
+                  key={s}
+                  type="button"
+                  className={`status-chip ${selected.status === s ? "status-chip-active " + STATUS_CSS[s] : ""}`}
+                  onClick={() => setOverride(selectedCode, { status: s })}
+                >
+                  {STATUS_TR[s]}
+                </button>
+              ))}
             </div>
 
             {/* Key metrics */}
@@ -541,53 +689,64 @@ export const StrategyApp = () => {
               </div>
             </div>
 
+            {/* Tabs */}
+            <div className="ds-tabs">
+              {(["genel","iletisim","spor"] as DossierTab[]).map(t => {
+                const labels: Record<DossierTab,string> = { genel:"Strateji", iletisim:"İletişim", spor:"Spor" };
+                return (
+                  <button key={t} type="button" className={`ds-tab-btn ${dossierTab===t?"active":""}`} onClick={() => setDossierTab(t)}>
+                    {labels[t]}
+                  </button>
+                );
+              })}
+            </div>
+
             <div className="ds-scroll">
-              {/* Ne istiyor */}
-              <div className="ds-block">
-                <div className="ds-block-label">Ne İstiyor?</div>
-                <div className="ds-block-val">{primaryNeedLabel(selected.primaryNeed)}</div>
-              </div>
+              {/* ── STRATEJİ ── */}
+              {dossierTab === "genel" && (
+                <>
+                  <div className="ds-block">
+                    <div className="ds-block-label">Ne İstiyor?</div>
+                    <div className="ds-block-val">{primaryNeedLabel(selected.primaryNeed)}</div>
+                  </div>
 
-              {/* Stratejik özet */}
-              <div className="ds-block">
-                <div className="ds-block-label">Stratejik Değerlendirme</div>
-                <div className="ds-block-text">{translateStrategicText(buildStrategicSummary(selected))}</div>
-              </div>
+                  <EditableBlock
+                    label="Stratejik Değerlendirme"
+                    value={getAssessment(selected)}
+                    onSave={v => setOverride(selectedCode, { assessment: v })}
+                  />
 
-              {/* Temas */}
-              {(selected.entryChannels ?? []).length > 0 && (
-                <div className="ds-block">
-                  <div className="ds-block-label">Temas Kanalı</div>
-                  <div className="ds-block-text">{translateStrategicText(selected.entryChannels[0])}</div>
-                </div>
-              )}
+                  {getEntryChannel(selected) && (
+                    <EditableBlock
+                      label="Temas Kanalı"
+                      value={getEntryChannel(selected)}
+                      onSave={v => setOverride(selectedCode, { entryChannel: v })}
+                    />
+                  )}
 
-              {/* Dikkat */}
-              {(selected.redLines ?? []).length > 0 && (
-                <div className="ds-block ds-block-warn">
-                  <div className="ds-block-label">Dikkat Edilecek</div>
-                  <div className="ds-block-text">{translateStrategicText(selected.redLines[0])}</div>
-                </div>
-              )}
+                  {getRedLine(selected) && (
+                    <EditableBlock
+                      label="Dikkat Edilecek"
+                      value={getRedLine(selected)}
+                      onSave={v => setOverride(selectedCode, { redLine: v })}
+                      warn
+                    />
+                  )}
 
-              {/* Notes section */}
-              <div className="ds-notes-header">
-                <span className="ds-block-label">Notlar</span>
-                <button type="button" className="ds-notes-all-btn" onClick={() => { setSheet(null); setView("notes"); }}>
-                  Tüm notlar →
-                </button>
-              </div>
-
-              <form className="note-form" onSubmit={addNote}>
-                <input className="note-input" placeholder="Not başlığı" value={noteTitle} onChange={e => setNoteTitle(e.target.value)} />
-                <textarea className="note-textarea" placeholder="Not ekle…" rows={3} value={noteBody} onChange={e => setNoteBody(e.target.value)} />
-                <button className="note-submit" type="submit">Kaydet</button>
-              </form>
-
-              {countryNotes.length > 0 && (
-                <div className="ds-note-list">
+                  {/* Notes in strategy tab */}
+                  <div className="ds-notes-header">
+                    <span className="ds-block-label">Notlar</span>
+                    <button type="button" className="ds-notes-all-btn" onClick={() => { setSheet(null); setView("notes"); }}>
+                      Tüm notlar →
+                    </button>
+                  </div>
+                  <form className="note-form" onSubmit={addNote}>
+                    <input className="note-input" placeholder="Not başlığı" value={noteTitle} onChange={e => setNoteTitle(e.target.value)} />
+                    <textarea className="note-textarea" placeholder="Not ekle…" rows={3} value={noteBody} onChange={e => setNoteBody(e.target.value)} />
+                    <button className="note-submit" type="submit">Kaydet</button>
+                  </form>
                   {countryNotes.map(n => (
-                    <div key={n.id} className="note-card">
+                    <div key={n.id} className="note-card" style={{ marginTop: 8 }}>
                       <div className="note-card-header">
                         <span className="note-card-title">{n.title}</span>
                         <div style={{ display:"flex", gap:"8px", alignItems:"center" }}>
@@ -598,7 +757,133 @@ export const StrategyApp = () => {
                       <div className="note-card-body">{n.body}</div>
                     </div>
                   ))}
-                </div>
+                </>
+              )}
+
+              {/* ── İLETİŞİM ── */}
+              {dossierTab === "iletisim" && (
+                <>
+                  <div className="ds-block">
+                    <div className="ds-block-label">Federasyon</div>
+                    <div className="ds-block-val" style={{ fontSize: 14 }}>{selectedDir?.federationName ?? selected.federationName}</div>
+                  </div>
+
+                  <div className="ds-block">
+                    <div className="ds-block-label">Başkan</div>
+                    <div className="contact-row">
+                      <div className="contact-main">{selected.president}</div>
+                    </div>
+                  </div>
+
+                  {selectedDir?.secretaryGeneral && (
+                    <div className="ds-block">
+                      <div className="ds-block-label">Genel Sekreter</div>
+                      <div className="contact-row">
+                        <div className="contact-main">{selectedDir.secretaryGeneral}</div>
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedDir?.email && (
+                    <div className="ds-block">
+                      <div className="ds-block-label">E-posta</div>
+                      <div className="contact-row">
+                        <div className="contact-main contact-link">{selectedDir.email}</div>
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedDir?.phone && (
+                    <div className="ds-block">
+                      <div className="ds-block-label">Telefon</div>
+                      <div className="contact-main">{selectedDir.phone}</div>
+                    </div>
+                  )}
+
+                  {selectedDir?.website && (
+                    <div className="ds-block">
+                      <div className="ds-block-label">Website</div>
+                      <div className="contact-main contact-link">{selectedDir.website}</div>
+                    </div>
+                  )}
+
+                  {(selectedDir?.addressLine1 || selectedDir?.city) && (
+                    <div className="ds-block">
+                      <div className="ds-block-label">Adres</div>
+                      <div className="ds-block-text">
+                        {[selectedDir?.addressLine1, selectedDir?.addressLine2, selectedDir?.city, selectedDir?.country].filter(Boolean).join(", ")}
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedDir?.disciplines && selectedDir.disciplines.length > 0 && (
+                    <div className="ds-block">
+                      <div className="ds-block-label">Branşlar</div>
+                      <div className="discipline-chips">
+                        {selectedDir.disciplines.map(d => (
+                          <span key={d} className="discipline-chip">{d}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* ── SPOR ── */}
+              {dossierTab === "spor" && (
+                <>
+                  {selected.achievements?.length > 0 && (
+                    <div className="ds-block">
+                      <div className="ds-block-label">Başarılar</div>
+                      {selected.achievements.slice(0, 4).map((a, i) => (
+                        <div key={i} className="achievement-row">
+                          <span className="achievement-bullet">▸</span>
+                          <span className="achievement-text">{translateStrategicText(a)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {sportHighlights.length > 0 && (
+                    <div className="ds-block">
+                      <div className="ds-block-label">Spor Profili</div>
+                      {sportHighlights.map((h, i) => (
+                        <div key={i} className="achievement-row">
+                          <span className="achievement-bullet">▸</span>
+                          <span className="achievement-text">{h}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {selected.figRoles?.length > 0 && (
+                    <div className="ds-block">
+                      <div className="ds-block-label">FIG Rolleri</div>
+                      {selected.figRoles.slice(0, 5).map((r, i) => (
+                        <div key={i} className="role-row">
+                          <div className="role-name">{r.name}</div>
+                          <div className="role-title">{r.role}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {selected.hostedEvents?.length > 0 && (
+                    <div className="ds-block">
+                      <div className="ds-block-label">Ev Sahipliği</div>
+                      {selected.hostedEvents.slice(0, 3).map((e, i) => (
+                        <div key={i} className="achievement-row">
+                          <span className="achievement-bullet">▸</span>
+                          <span className="achievement-text">{translateStrategicText(e)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {sportHighlights.length === 0 && !selected.achievements?.length && !selected.figRoles?.length && (
+                    <div className="empty-state">Bu federasyon için spor verisi bulunamadı.</div>
+                  )}
+                </>
               )}
             </div>
           </div>

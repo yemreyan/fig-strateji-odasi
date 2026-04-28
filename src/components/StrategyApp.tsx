@@ -302,7 +302,7 @@ const AppMain = () => {
   const dSearch = useDeferredValue(search.trim().toLowerCase());
 
   // Map
-  const [mapPos, setMapPos] = useState<{ coordinates: [number, number]; zoom: number }>({ coordinates: [10, 12], zoom: 1 });
+  const [mapPos, setMapPos] = useState<{ coordinates: [number, number]; zoom: number }>({ coordinates: [15, 20], zoom: 1 });
   const [mapPreview, setMapPreview] = useState<string | null>(null); // null = bar gizli
   const mapRef = useRef<HTMLDivElement>(null);
 
@@ -311,6 +311,7 @@ const AppMain = () => {
   const [noteTitle, setNoteTitle] = useState("");
   const [noteBody, setNoteBody] = useState("");
   const [showNoteForm, setShowNoteForm] = useState(false);
+  const [noteReturnCode, setNoteReturnCode] = useState<string | null>(null); // "Tümü"dan döniş
 
   // Overrides — synced from Firebase
   const [overrides, setOverrides] = useState<Record<string, CountryOverride>>({});
@@ -339,16 +340,17 @@ const AppMain = () => {
     if (view !== "map") setMapPreview(null);
   }, [view]);
 
-  // Fix map preserveAspectRatio — retry until SVG renders
+  // Fix map SVG sizing — retry until SVG renders
   useEffect(() => {
     if (view !== "map") return;
     let tries = 0;
     const fix = () => {
       const svg = mapRef.current?.querySelector("svg");
       if (svg) {
-        svg.setAttribute("preserveAspectRatio", "xMidYMid slice");
+        svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
         svg.style.width = "100%";
         svg.style.height = "100%";
+        svg.style.display = "block";
       } else if (tries < 20) {
         tries++;
         setTimeout(fix, 50);
@@ -560,7 +562,7 @@ const AppMain = () => {
         {/* ══ HARİTA ══ */}
         {view === "map" && (
           <div className="map-container" ref={mapRef}>
-            <ComposableMap projectionConfig={{ rotate: [-10, 0, 0], scale: 147 }} style={{ width: "100%", height: "100%" }}>
+            <ComposableMap projectionConfig={{ rotate: [-10, 0, 0], scale: 130 }} style={{ width: "100%", height: "100%" }}>
               <ZoomableGroup
                 zoom={mapPos.zoom}
                 center={mapPos.coordinates}
@@ -674,6 +676,18 @@ const AppMain = () => {
         {/* ══ NOTLAR ══ */}
         {view === "notes" && (
           <div className="tab-scroll">
+            {noteReturnCode && (
+              <div className="notes-back-bar">
+                <button type="button" className="notes-back-btn" onClick={() => {
+                  setSelectedCode(noteReturnCode);
+                  setDossierTab("genel");
+                  setSheet("dossier");
+                  setNoteReturnCode(null);
+                }}>
+                  ← {COUNTRY_TR[noteReturnCode] ?? noteReturnCode} Dosyasına Dön
+                </button>
+              </div>
+            )}
             <section className="section">
               <div className="notes-header-row">
                 <h2 className="section-title">Yeni Not</h2>
@@ -852,7 +866,7 @@ const AppMain = () => {
                       <button type="button" className="ds-notes-add-btn" onClick={() => setShowNoteForm(v => !v)}>
                         <IcPlus /> Not Ekle
                       </button>
-                      <button type="button" className="ds-notes-all-btn" onClick={() => { setSheet(null); setView("notes"); }}>
+                      <button type="button" className="ds-notes-all-btn" onClick={() => { setNoteReturnCode(selectedCode); setSheet(null); setView("notes"); }}>
                         Tümü →
                       </button>
                     </div>

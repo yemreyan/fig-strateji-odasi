@@ -221,9 +221,17 @@ a { color: inherit; text-decoration: none; }
   position: relative;
   width: 100%;
   height: 100%;
-  background: var(--bg);
+  background: #0a1628;
+  overflow: hidden;
 }
-.map-container > div { width: 100% !important; height: 100% !important; }
+/* SVG'yi container'a doldur, legend/zoom div'lerine dokunma */
+.map-container svg {
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+  position: absolute;
+  inset: 0;
+}
 
 .map-legend {
   position: absolute;
@@ -603,23 +611,43 @@ a { color: inherit; text-decoration: none; }
     flex-direction: row;
     height: 100dvh;
   }
+
+  /* Header → sol kenar çubuğu */
   .hdr {
-    display: none;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
+    width: 200px;
+    height: 100dvh;
+    padding: 20px 12px;
+    border-right: 1px solid var(--border);
+    border-bottom: none;
+    flex-shrink: 0;
+    position: sticky;
+    top: 0;
+    background: var(--surface);
+    backdrop-filter: none;
+    gap: 0;
+    overflow-y: auto;
+    z-index: 20;
   }
-  .bottom-nav {
-    display: none;
+  .hdr-brand {
+    width: 100%;
+    padding: 4px 8px 16px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 8px;
+    flex-direction: column;
   }
+  .hdr-eyebrow { font-size: 9px; }
+  .hdr-vote-num { font-size: 28px; }
+
+  /* Sidebar nav tabs */
   .hdr-nav {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    width: 200px;
-    height: 100%;
-    background: var(--surface);
-    border-right: 1px solid var(--border);
-    padding: 20px 12px;
-    position: fixed;
-    left: 0; top: 0;
+    gap: 2px;
+    width: 100%;
   }
   .hdr-tab {
     display: flex;
@@ -631,10 +659,16 @@ a { color: inherit; text-decoration: none; }
     font-weight: 500;
     color: var(--muted);
     transition: all .15s;
+    width: 100%;
   }
-  .hdr-tab svg { width: 18px; height: 18px; }
+  .hdr-tab svg { width: 18px; height: 18px; flex-shrink: 0; }
   .hdr-tab.active { background: rgba(56,189,248,.1); color: var(--blue); font-weight: 700; }
-  .main { margin-left: 200px; }
+  .hdr-tab:hover:not(.active) { background: rgba(255,255,255,.04); color: var(--text); }
+
+  /* Mobil top nav → masaüstünde gizle */
+  .bottom-nav { display: none; }
+
+  .main { /* flex:1 zaten var, margin gerekmez */ }
   .dossier-sheet { left: 200px; max-width: calc(100% - 200px); }
   .sheet-backdrop { left: 200px; }
 }
@@ -901,3 +935,23 @@ a { color: inherit; text-decoration: none; }
   justify-content: space-between;
   margin-bottom: 12px;
 }
+
+/* ── Notes back bar ─────────────────────────────────────── */
+.notes-back-bar {
+  padding: 10px 16px 0;
+}
+.notes-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--blue);
+  background: rgba(56,189,248,.08);
+  border: 1px solid rgba(56,189,248,.2);
+  padding: 8px 14px;
+  border-radius: 10px;
+  width: 100%;
+  justify-content: center;
+}
+.notes-back-btn:hover { background: rgba(56,189,248,.15); }

@@ -669,7 +669,7 @@ a { color: inherit; text-decoration: none; }
   .bottom-nav { display: none; }
 
   .main { /* flex:1 zaten var, margin gerekmez */ }
-  .dossier-sheet { left: 200px; max-width: calc(100% - 200px); }
+  .dossier-sheet { left: 200px; right: 0; }
   .sheet-backdrop { left: 200px; }
 }
 

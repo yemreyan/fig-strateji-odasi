@@ -450,6 +450,7 @@ const AppMain = () => {
   }, [mergedSeed]);
 
   return (
+    <>
     <div className="shell">
       {/* ── Header ── */}
       <header className="hdr">
@@ -762,9 +763,10 @@ const AppMain = () => {
           </div>
         )}
       </main>
+    </div>{/* /shell */}
 
-      {/* ── Dossier Sheet ── */}
-      {sheet === "dossier" && selected && (
+    {/* ── Dossier Sheet — shell dışında, position:fixed viewport'a göre ── */}
+    {sheet === "dossier" && selected && (
         <>
           <div className="sheet-backdrop" onClick={() => setSheet(null)} />
           <div className="dossier-sheet">
@@ -1028,7 +1030,7 @@ const AppMain = () => {
           </div>
         </>
       )}
-    </div>
+    </>
   );
 };
 

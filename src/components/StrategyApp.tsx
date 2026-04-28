@@ -54,6 +54,54 @@ type CountryOverride = {
 
 const officialDirectory = federationDirectoryData as FederationDirectoryRecord[];
 
+// ── Türkçe ülke isimleri ──────────────────────────────────────────────
+const COUNTRY_TR: Record<string, string> = {
+  AFG:"Afganistan", ALB:"Arnavutluk", ALG:"Cezayir", AND:"Andorra", ANG:"Angola",
+  ANT:"Antigua ve Barbuda", ARG:"Arjantin", ARM:"Ermenistan", ARU:"Aruba",
+  ASA:"Amerikan Samoası", AUS:"Avustralya", AUT:"Avusturya", AZE:"Azerbaycan",
+  BAH:"Bahamalar", BAN:"Bangladeş", BAR:"Barbados", BEL:"Belçika", BEN:"Benin",
+  BER:"Bermuda", BIH:"Bosna-Hersek", BLR:"Belarus", BOL:"Bolivya", BRA:"Brezilya",
+  BRN:"Bahreyn", BUL:"Bulgaristan", BUR:"Burkina Faso", CAM:"Kamboçya",
+  CAN:"Kanada", CAY:"Cayman Adaları", CGO:"Kongo", CHA:"Çad", CHI:"Şili",
+  CHN:"Çin", CIV:"Fildişi Sahili", CMR:"Kamerun", COD:"Kongo DR", COK:"Cook Adaları",
+  COL:"Kolombiya", COM:"Komorlar", CPV:"Yeşil Burun Adaları", CRC:"Kosta Rika",
+  CRO:"Hırvatistan", CUB:"Küba", CYP:"Kıbrıs", CZE:"Çekya", DEN:"Danimarka",
+  DOM:"Dominik Cumhuriyeti", ECU:"Ekvador", EGY:"Mısır", ESA:"El Salvador",
+  ESP:"İspanya", EST:"Estonya", ETH:"Etiyopya", FIJ:"Fiji", FIN:"Finlandiya",
+  FRA:"Fransa", GAB:"Gabon", GBR:"Büyük Britanya", GEO:"Gürcistan", GER:"Almanya",
+  GHA:"Gana", GRE:"Yunanistan", GRN:"Grenada", GUA:"Guatemala", GUI:"Gine",
+  GUM:"Guam", GUY:"Guyana", HAI:"Haiti", HKG:"Hong Kong", HON:"Honduras",
+  HUN:"Macaristan", INA:"Endonezya", IND:"Hindistan", IRI:"İran", IRL:"İrlanda",
+  IRQ:"Irak", ISL:"İzlanda", ISR:"İsrail", ISV:"ABD Virjin Adaları", ITA:"İtalya",
+  JAM:"Jamaika", JOR:"Ürdün", JPN:"Japonya", KAZ:"Kazakistan", KEN:"Kenya",
+  KGZ:"Kırgızistan", KOR:"Güney Kore", KOS:"Kosova", KSA:"Suudi Arabistan",
+  KUW:"Kuveyt", LAO:"Laos", LAT:"Letonya", LBA:"Libya", LBR:"Liberia",
+  LCA:"Saint Lucia", LES:"Lesotho", LIB:"Lübnan", LIE:"Lihtenştayn",
+  LTU:"Litvanya", LUX:"Lüksemburg", MAD:"Madagaskar", MAR:"Fas", MAS:"Malezya",
+  MAW:"Malavi", MDA:"Moldova", MDV:"Maldivler", MEX:"Meksika", MGL:"Moğolistan",
+  MKD:"Kuzey Makedonya", MLI:"Mali", MLT:"Malta", MNE:"Karadağ", MON:"Monako",
+  MOZ:"Mozambik", MRI:"Mauritius", MTN:"Moritanya", MYA:"Myanmar",
+  NAM:"Namibya", NCA:"Nikaragua", NED:"Hollanda", NEP:"Nepal", NGR:"Nijerya",
+  NIG:"Nijer", NOR:"Norveç", NZL:"Yeni Zelanda", OMA:"Umman", PAK:"Pakistan",
+  PAN:"Panama", PAR:"Paraguay", PER:"Peru", PHI:"Filipinler", PLE:"Filistin",
+  PLW:"Palau", PNG:"Papua Yeni Gine", POL:"Polonya", POR:"Portekiz",
+  PRK:"Kuzey Kore", PUR:"Porto Riko", QAT:"Katar", ROU:"Romanya",
+  RSA:"Güney Afrika", RUS:"Rusya", RWA:"Ruanda", SAM:"Samoa", SAU:"Suudi Arabistan",
+  SEN:"Senegal", SEY:"Seyşeller", SGP:"Singapur", SKN:"Saint Kitts ve Nevis",
+  SLE:"Sierra Leone", SLO:"Slovenya", SMR:"San Marino", SOL:"Solomon Adaları",
+  SOM:"Somali", SRB:"Sırbistan", SRI:"Sri Lanka", STP:"São Tomé ve Príncipe",
+  SUD:"Sudan", SUI:"İsviçre", SUR:"Surinam", SVK:"Slovakya", SWE:"İsveç",
+  SWZ:"Esvatini", SYR:"Suriye", TAN:"Tanzanya", TGA:"Tonga", THA:"Tayland",
+  TJK:"Tacikistan", TKM:"Türkmenistan", TLS:"Doğu Timor", TOG:"Togo",
+  TPE:"Çin Taipei", TRI:"Trinidad ve Tobago", TUN:"Tunus", TUR:"Türkiye",
+  UAE:"BAE", UGA:"Uganda", UKR:"Ukrayna", URU:"Uruguay", USA:"ABD",
+  UZB:"Özbekistan", VAN:"Vanuatu", VEN:"Venezuela", VIE:"Vietnam",
+  VIN:"Saint Vincent", YEM:"Yemen", ZAM:"Zambia", ZIM:"Zimbabwe",
+  NZL2:"Yeni Zelanda", KSA2:"Suudi Arabistan",
+};
+const trName = (c: FederationSeed) => COUNTRY_TR[c.countryCode] ?? c.countryName;
+const fmtScore = (n: number) => Math.round(n * 100) / 100;
+
 // ── Icons ─────────────────────────────────────────────────────────────
 const IcGrid = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -231,10 +279,8 @@ const LoginScreen = ({ onLogin }: { onLogin: () => void }) => {
   );
 };
 
-// ── Ana Bileşen ────────────────────────────────────────────────────────
-export const StrategyApp = () => {
-  const [authed, setAuthed] = useState(() => sessionStorage.getItem(SESSION_KEY) === "1");
-  if (!authed) return <LoginScreen onLogin={() => setAuthed(true)} />;
+// ── İç Uygulama (hooks burada — conditional return yok) ───────────────
+const AppMain = () => {
   const ranked = useMemo(() => rankCountriesByUrgency(federationSeeds), []);
   const continentSummaries = useMemo(() => buildContinentSummaries(federationSeeds), []);
   const directoryByCode = useMemo(() =>
@@ -325,7 +371,7 @@ export const StrategyApp = () => {
   const filtered = useMemo(() => mergedSeed.filter(c => {
     if (statusFilter !== "all" && c.status !== statusFilter) return false;
     if (continentFilter !== "all" && c.continent !== continentFilter) return false;
-    if (dSearch && ![c.countryName, c.countryCode, c.president, c.federationName].join(" ").toLowerCase().includes(dSearch)) return false;
+    if (dSearch && ![c.countryName, trName(c), c.countryCode, c.president, c.federationName].join(" ").toLowerCase().includes(dSearch)) return false;
     return true;
   }), [mergedSeed, statusFilter, continentFilter, dSearch]);
 
@@ -370,7 +416,7 @@ export const StrategyApp = () => {
     const note: Note = {
       id: `${selectedCode}-${Date.now()}`,
       countryCode: selectedCode,
-      countryName: selected.countryName,
+      countryName: trName(selected),
       title: t, body: b,
       date: new Intl.DateTimeFormat("tr-TR", { day: "2-digit", month: "short", year: "numeric" }).format(new Date())
     };
@@ -480,11 +526,11 @@ export const StrategyApp = () => {
                   <div className="priority-row-left">
                     <span className={`badge ${STATUS_CSS[c.status]}`}>{STATUS_TR[c.status]}</span>
                     <div>
-                      <div className="priority-name">{c.countryName}</div>
+                      <div className="priority-name">{trName(c)}</div>
                       <div className="priority-sub">{continentMeta[c.continent]?.label} · {primaryNeedLabel(c.primaryNeed)}</div>
                     </div>
                   </div>
-                  <div className="priority-score" style={{ color: statusTone(c.status).color }}>{c.priorityScore}</div>
+                  <div className="priority-score" style={{ color: statusTone(c.status).color }}>{fmtScore(c.priorityScore)}</div>
                 </div>
               ))}
             </section>
@@ -543,7 +589,7 @@ export const StrategyApp = () => {
             {sheet !== "dossier" && selected && (
               <div className="map-bar" onClick={() => { setDossierTab("genel"); setSheet("dossier"); }}>
                 <div>
-                  <div className="map-bar-name">{selected.countryName} <span className="map-bar-code">{selected.countryCode}</span></div>
+                  <div className="map-bar-name">{trName(selected)} <span className="map-bar-code">{selected.countryCode}</span></div>
                   <div className="map-bar-sub">{STATUS_TR[selected.status]} · {continentMeta[selected.continent]?.label}</div>
                 </div>
                 <button className="map-bar-btn" type="button">Dosya Aç</button>
@@ -589,13 +635,13 @@ export const StrategyApp = () => {
                 <div className="country-card-left">
                   <div className="country-card-code">{c.countryCode}</div>
                   <div>
-                    <div className="country-card-name">{c.countryName}</div>
+                    <div className="country-card-name">{trName(c)}</div>
                     <div className="country-card-sub">{continentMeta[c.continent]?.label} · {c.president}</div>
                   </div>
                 </div>
                 <div className="country-card-right">
                   <span className={`badge ${STATUS_CSS[c.status]}`}>{STATUS_TR[c.status]}</span>
-                  <span className="country-card-score">{c.priorityScore}</span>
+                  <span className="country-card-score">{fmtScore(c.priorityScore)}</span>
                 </div>
               </div>
             ))}
@@ -617,7 +663,7 @@ export const StrategyApp = () => {
                 >
                   {ranked.map(c => (
                     <option key={c.countryCode} value={c.countryCode}>
-                      {c.countryName} ({c.countryCode}) — {STATUS_TR[mergedByCode[c.countryCode]?.status ?? c.status]}
+                      {trName(c)} ({c.countryCode}) — {STATUS_TR[mergedByCode[c.countryCode]?.status ?? c.status]}
                     </option>
                   ))}
                 </select>
@@ -704,7 +750,7 @@ export const StrategyApp = () => {
             {/* Header */}
             <div className="ds-header">
               <div style={{ minWidth:0, flex:1 }}>
-                <div className="ds-title">{selected.countryName}</div>
+                <div className="ds-title">{trName(selected)}</div>
                 <div className="ds-meta">{continentMeta[selected.continent]?.label} · {selected.president}</div>
               </div>
               <div style={{ display:"flex", alignItems:"center", gap:"10px", flexShrink:0 }}>
@@ -729,7 +775,7 @@ export const StrategyApp = () => {
             {/* Key metrics */}
             <div className="ds-metrics">
               <div className="ds-metric">
-                <div className="ds-metric-val">{selected.priorityScore}</div>
+                <div className="ds-metric-val">{fmtScore(selected.priorityScore)}</div>
                 <div className="ds-metric-key">Öncelik</div>
               </div>
               <div className="ds-metric">
@@ -961,4 +1007,11 @@ export const StrategyApp = () => {
       )}
     </div>
   );
+};
+
+// ── Giriş Kapısı (hooks kuralı: AppMain ayrı component'te) ─────────────
+export const StrategyApp = () => {
+  const [authed, setAuthed] = useState(() => sessionStorage.getItem(SESSION_KEY) === "1");
+  if (!authed) return <LoginScreen onLogin={() => setAuthed(true)} />;
+  return <AppMain />;
 };

@@ -467,6 +467,20 @@ const AppMain = () => {
         </nav>
       </header>
 
+      {/* ── Top Nav ── */}
+      <nav className="bottom-nav">
+        {(["dashboard","map","countries","notes"] as AppView[]).map(v => {
+          const labels: Record<AppView,string> = { dashboard:"Durum", map:"Harita", countries:"Federasyonlar", notes:"Notlar" };
+          const icons: Record<AppView, React.ReactElement> = { dashboard:<IcGrid/>, map:<IcMap/>, countries:<IcGlobe/>, notes:<IcNote/> };
+          return (
+            <button key={v} type="button" className={`nav-tab ${view===v?"active":""}`} onClick={() => { setView(v); setSheet(null); }}>
+              <span className="nav-tab-icon">{icons[v]}</span>
+              <span className="nav-tab-label">{labels[v]}</span>
+            </button>
+          );
+        })}
+      </nav>
+
       <main className="main">
         {/* ══ DURUM PANELİ ══ */}
         {view === "dashboard" && (
@@ -725,20 +739,6 @@ const AppMain = () => {
           </div>
         )}
       </main>
-
-      {/* ── Bottom Nav ── */}
-      <nav className="bottom-nav">
-        {(["dashboard","map","countries","notes"] as AppView[]).map(v => {
-          const labels: Record<AppView,string> = { dashboard:"Durum", map:"Harita", countries:"Federasyonlar", notes:"Notlar" };
-          const icons: Record<AppView, React.ReactElement> = { dashboard:<IcGrid/>, map:<IcMap/>, countries:<IcGlobe/>, notes:<IcNote/> };
-          return (
-            <button key={v} type="button" className={`nav-tab ${view===v?"active":""}`} onClick={() => { setView(v); setSheet(null); }}>
-              <span className="nav-tab-icon">{icons[v]}</span>
-              <span className="nav-tab-label">{labels[v]}</span>
-            </button>
-          );
-        })}
-      </nav>
 
       {/* ── Dossier Sheet ── */}
       {sheet === "dossier" && selected && (

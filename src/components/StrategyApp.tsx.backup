@@ -1,0 +1,2116 @@
+import {
+  type FormEvent,
+  type ReactNode,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useState
+} from "react";
+import {
+  ComposableMap,
+  Geographies,
+  Geography,
+  Marker,
+  ZoomableGroup
+} from "react-simple-maps";
+import worldGeoData from "world-atlas/countries-110m.json";
+import federationDirectoryData from "../data/federationDirectory.json";
+import { federationSeeds } from "../data/federationSeeds";
+import { buildMapNodes } from "../lib/map";
+import {
+  buildAthleteNarrative,
+  buildCountryDashboard,
+  buildCountryIdentity,
+  buildFacilityHighlights,
+  buildFacilityNarrative,
+  buildJudgeNarrative,
+  buildMessageBullets,
+  buildOperationalChips,
+  buildPowerNarrative,
+  buildProofBullets,
+  buildRoleDigest,
+  buildSportHighlights,
+  buildStrategicMoves,
+  buildStrategicSummary,
+  channelLabel,
+  continentMeta,
+  metricCopy,
+  primaryNeedLabel,
+  taskStatusLabel,
+  translateLanguage,
+  translateStrategicText
+} from "../lib/presentation";
+import { buildCountryRoadmap } from "../lib/roadmap";
+import {
+  buildContinentSummaries,
+  rankCountriesByUrgency,
+  statusTone
+} from "../lib/strategy";
+import type {
+  ContinentCode,
+  FederationDirectoryRecord,
+  SupportStatus
+} from "../types";
+
+type FilterValue<T extends string> = T | "all";
+type DossierPanel = "overview" | "relations" | "sports" | "congress";
+type MobileSheet = "controls" | "countries" | null;
+type AppView = "operations" | "directory";
+type DirectoryQuickFilter =
+  | "all"
+  | "priority"
+  | "withRoles"
+  | "missingWebsite"
+  | "missingPhone";
+
+type OperationNote = {
+  id: string;
+  title: string;
+  body: string;
+  createdAt: string;
+};
+
+const notesStorageKey = "fig-strategy-room-notes";
+
+const readStoredNotes = (): Record<string, OperationNote[]> => {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  try {
+    const raw = window.localStorage.getItem(notesStorageKey);
+    return raw ? (JSON.parse(raw) as Record<string, OperationNote[]>) : {};
+  } catch {
+    return {};
+  }
+};
+
+const writeStoredNotes = (notes: Record<string, OperationNote[]>) => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(notesStorageKey, JSON.stringify(notes));
+};
+
+const emptyCountryMessage =
+  "Bu filtreyle eşleşen ülke bulunamadı. Arama metnini veya durum filtresini gevşetebilirsin.";
+const featuredCountryCodes = [
+  "TUR",
+  "GER",
+  "JPN",
+  "QAT",
+  "EGY",
+  "USA",
+  "CHN",
+  "AZE",
+  "KAZ",
+  "CRO",
+  "MEX",
+  "IND"
+];
+const officialDirectory = federationDirectoryData as FederationDirectoryRecord[];
+
+export const StrategyApp = () => {
+  const ranked = useMemo(() => rankCountriesByUrgency(federationSeeds), []);
+  const continentSummaries = useMemo(
+    () => buildContinentSummaries(federationSeeds),
+    []
+  );
+  const directoryByCode = useMemo(
+    () =>
+      Object.fromEntries(
+        officialDirectory.map((record) => [record.countryCode, record])
+      ) as Record<string, FederationDirectoryRecord>,
+    []
+  );
+  const seedByCode = useMemo(
+    () =>
+      Object.fromEntries(ranked.map((country) => [country.countryCode, country])),
+    [ranked]
+  );
+
+  const [activeView, setActiveView] = useState<AppView>("operations");
+  const [continentFilter, setContinentFilter] =
+    useState<FilterValue<ContinentCode>>("all");
+  const [statusFilter, setStatusFilter] =
+    useState<FilterValue<SupportStatus>>("all");
+  const [selectedCode, setSelectedCode] = useState<string>(ranked[0].countryCode);
+  const [searchQuery, setSearchQuery] = useState("");
+  const deferredSearch = useDeferredValue(searchQuery.trim().toLowerCase());
+  const [directoryContinentFilter, setDirectoryContinentFilter] =
+    useState<FilterValue<ContinentCode>>("all");
+  const [directoryQuickFilter, setDirectoryQuickFilter] =
+    useState<DirectoryQuickFilter>("all");
+  const [directorySearchQuery, setDirectorySearchQuery] = useState("");
+  const deferredDirectorySearch = useDeferredValue(
+    directorySearchQuery.trim().toLowerCase()
+  );
+  const [selectedDirectoryCode, setSelectedDirectoryCode] = useState<string>(
+    directoryByCode.TUR?.countryCode ?? officialDirectory[0]?.countryCode ?? ""
+  );
+  const [notesByCountry, setNotesByCountry] =
+    useState<Record<string, OperationNote[]>>(readStoredNotes);
+  const [noteTitle, setNoteTitle] = useState("");
+  const [noteBody, setNoteBody] = useState("");
+  const [activePanel, setActivePanel] = useState<DossierPanel>("overview");
+  const [mobileSheet, setMobileSheet] = useState<MobileSheet>(null);
+  const [mapPosition, setMapPosition] = useState<{
+    coordinates: [number, number];
+    zoom: number;
+  }>({
+    coordinates: [10, 12],
+    zoom: 1
+  });
+
+  useEffect(() => {
+    writeStoredNotes(notesByCountry);
+  }, [notesByCountry]);
+
+  const filteredCountries = useMemo(() => {
+    return ranked.filter((country) => {
+      const continentPass =
+        continentFilter === "all" || country.continent === continentFilter;
+      const statusPass = statusFilter === "all" || country.status === statusFilter;
+      const searchPass =
+        deferredSearch.length === 0 ||
+        [
+          country.countryName,
+          country.countryCode,
+          country.president,
+          country.federationName
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(deferredSearch);
+
+      return continentPass && statusPass && searchPass;
+    });
+  }, [continentFilter, deferredSearch, ranked, statusFilter]);
+
+  const filteredDirectory = useMemo(() => {
+    return officialDirectory.filter((record) => {
+      const strategicRecord = seedByCode[record.countryCode];
+      const continentPass =
+        directoryContinentFilter === "all" ||
+        record.continent === directoryContinentFilter;
+      const quickPass =
+        directoryQuickFilter === "all" ||
+        (directoryQuickFilter === "priority" &&
+          strategicRecord &&
+          strategicRecord.priorityScore >= 70) ||
+        (directoryQuickFilter === "withRoles" &&
+          strategicRecord &&
+          strategicRecord.figRoles.length > 0) ||
+        (directoryQuickFilter === "missingWebsite" && !record.website) ||
+        (directoryQuickFilter === "missingPhone" && !record.phone);
+      const searchPass =
+        deferredDirectorySearch.length === 0 ||
+        [
+          record.countryCode,
+          record.federationName,
+          record.president,
+          record.secretaryGeneral,
+          record.country,
+          record.city,
+          record.email,
+          record.phone
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(deferredDirectorySearch);
+
+      return continentPass && quickPass && searchPass;
+    });
+  }, [
+    deferredDirectorySearch,
+    directoryContinentFilter,
+    directoryQuickFilter,
+    seedByCode
+  ]);
+
+  useEffect(() => {
+    if (filteredCountries.length === 0) {
+      return;
+    }
+
+    const currentVisible = filteredCountries.some(
+      (country) => country.countryCode === selectedCode
+    );
+
+    if (!currentVisible) {
+      setSelectedCode(filteredCountries[0].countryCode);
+    }
+  }, [filteredCountries, selectedCode]);
+
+  useEffect(() => {
+    if (filteredDirectory.length === 0) {
+      return;
+    }
+
+    const currentVisible = filteredDirectory.some(
+      (record) => record.countryCode === selectedDirectoryCode
+    );
+
+    if (!currentVisible) {
+      setSelectedDirectoryCode(filteredDirectory[0].countryCode);
+    }
+  }, [filteredDirectory, selectedDirectoryCode]);
+
+  const selectedCountry =
+    filteredCountries.find((country) => country.countryCode === selectedCode) ??
+    ranked.find((country) => country.countryCode === selectedCode) ??
+    ranked[0];
+  const selectedDirectory =
+    filteredDirectory.find((record) => record.countryCode === selectedDirectoryCode) ??
+    directoryByCode[selectedDirectoryCode] ??
+    officialDirectory[0];
+  const selectedDirectoryStrategy = seedByCode[selectedDirectory.countryCode];
+
+  const mappedCountries = filteredCountries.filter((country) => country.coordinates);
+  const mapNodes = useMemo(
+    () => buildMapNodes(mappedCountries, mapPosition.zoom, selectedCountry.countryCode),
+    [mappedCountries, mapPosition.zoom, selectedCountry.countryCode]
+  );
+  const supporterCount = federationSeeds.filter(
+    (country) => country.status === "supporter"
+  ).length;
+  const persuadableCount = federationSeeds.filter(
+    (country) => country.status === "persuadable"
+  ).length;
+  const roadmap = buildCountryRoadmap({
+    countryCode: selectedCountry.countryCode,
+    countryName: selectedCountry.countryName,
+    continent: selectedCountry.continent,
+    status: selectedCountry.status,
+    primaryNeed: selectedCountry.primaryNeed,
+    relationshipStrength: selectedCountry.relationshipStrength
+  });
+  const summary = buildStrategicSummary(selectedCountry);
+  const proofBullets = buildProofBullets(selectedCountry);
+  const messageBullets = buildMessageBullets(selectedCountry);
+  const strategicMoves = buildStrategicMoves(selectedCountry);
+  const operationChips = buildOperationalChips(selectedCountry);
+  const dashboardMetrics = buildCountryDashboard(selectedCountry);
+  const identityLines = buildCountryIdentity(selectedCountry);
+  const powerNarrative = buildPowerNarrative(selectedCountry);
+  const judgeNarrative = buildJudgeNarrative(selectedCountry);
+  const athleteNarrative = buildAthleteNarrative(selectedCountry);
+  const facilityNarrative = buildFacilityNarrative(selectedCountry);
+  const roleDigest = buildRoleDigest(selectedCountry);
+  const sportHighlights = buildSportHighlights(selectedCountry);
+  const facilityHighlights = buildFacilityHighlights(selectedCountry);
+  const directoryMetrics = useMemo(
+    () => [
+      {
+        value: String(officialDirectory.length),
+        label: "Resmi affiliate kayıt",
+        helper: "FIG sayfasındaki ülke federasyonları tek tabloda toplandı."
+      },
+      {
+        value: String(officialDirectory.filter((item) => item.phone).length),
+        label: "Telefon bulunan kayıt",
+        helper: "Başkanlık masası için hızlı telefon erişimi olan federasyon sayısı."
+      },
+      {
+        value: String(officialDirectory.filter((item) => item.website).length),
+        label: "Web sitesi bulunan kayıt",
+        helper: "Resmi dijital kapısı açık federasyonların toplamı."
+      }
+    ],
+    []
+  );
+  const quickCountries = useMemo(() => {
+    const featured = featuredCountryCodes
+      .map((code) => filteredCountries.find((country) => country.countryCode === code))
+      .filter((country): country is (typeof filteredCountries)[number] => Boolean(country));
+    const extras = filteredCountries.filter(
+      (country) => !featured.some((item) => item.countryCode === country.countryCode)
+    );
+
+    return [...featured, ...extras].slice(0, 14);
+  }, [filteredCountries]);
+  const countryNotes = notesByCountry[selectedCountry.countryCode] ?? [];
+  const selectedTone = statusTone(selectedCountry.status);
+  const selectedContinent = continentMeta[selectedCountry.continent];
+  const spotlightTitle =
+    selectedCountry.status === "supporter"
+      ? "Sıcak destek masası"
+      : selectedCountry.status === "persuadable"
+        ? "Dönüştürülebilir hedef masa"
+        : selectedCountry.status === "watch"
+          ? "Temkinli yaklaşım masası"
+          : "Sert direnç masası";
+  const spotlightSignals = [
+    {
+      label: "Açılış tonu",
+      value: primaryNeedLabel(selectedCountry.primaryNeed),
+      body: translateStrategicText(selectedCountry.entryChannels[0] ?? summary)
+    },
+    {
+      label: "En güçlü koz",
+      value: `${selectedCountry.figPowerIndex}/100 FIG etkisi`,
+      body: translateStrategicText(selectedCountry.achievements[0] ?? proofBullets[0] ?? summary)
+    },
+    {
+      label: "Dikkat noktası",
+      value: selectedTone.label,
+      body: translateStrategicText(selectedCountry.redLines[0] ?? summary)
+    }
+  ];
+  const relationCounts = {
+    ally: selectedCountry.relationshipNetwork.filter((item) => item.kind === "ally")
+      .length,
+    swing: selectedCountry.relationshipNetwork.filter((item) => item.kind === "swing")
+      .length,
+    competitive: selectedCountry.relationshipNetwork.filter(
+      (item) => item.kind === "competitive"
+    ).length
+  };
+  const selectedDirectoryContinent = continentMeta[selectedDirectory.continent];
+  const selectedDirectoryAddress = formatDirectoryAddress(selectedDirectory);
+
+  const focusCountry = (
+    country: (typeof mappedCountries)[number] | typeof selectedCountry,
+    tighten = false
+  ) => {
+    setSelectedCode(country.countryCode);
+    setMobileSheet(null);
+
+    if (!country.coordinates) {
+      return;
+    }
+
+    setMapPosition((current) => ({
+      coordinates: country.coordinates as [number, number],
+      zoom: tighten ? Math.max(current.zoom, 3.2) : current.zoom
+    }));
+  };
+
+  const handleZoomIn = () => {
+    setMapPosition((current) => ({
+      ...current,
+      zoom: Math.min(current.zoom + 0.7, 4.8)
+    }));
+  };
+
+  const handleZoomOut = () => {
+    setMapPosition((current) => ({
+      ...current,
+      zoom: Math.max(current.zoom - 0.7, 1)
+    }));
+  };
+
+  const handleResetMap = () => {
+    setMapPosition({
+      coordinates: [10, 12],
+      zoom: 1
+    });
+  };
+
+  const handleAddNote = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const trimmedTitle = noteTitle.trim();
+    const trimmedBody = noteBody.trim();
+
+    if (!trimmedTitle || !trimmedBody) {
+      return;
+    }
+
+    const createdAt = new Intl.DateTimeFormat("tr-TR", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric"
+    }).format(new Date());
+
+    const newNote: OperationNote = {
+      id: `${selectedCountry.countryCode}-${Date.now()}`,
+      title: trimmedTitle,
+      body: trimmedBody,
+      createdAt
+    };
+
+    setNotesByCountry((current) => ({
+      ...current,
+      [selectedCountry.countryCode]: [newNote, ...(current[selectedCountry.countryCode] ?? [])]
+    }));
+    setNoteTitle("");
+    setNoteBody("");
+  };
+
+  const openDirectoryView = () => {
+    setActiveView("directory");
+    if (directoryByCode[selectedCountry.countryCode]) {
+      setSelectedDirectoryCode(selectedCountry.countryCode);
+    }
+  };
+
+  const openCountryDossier = (countryCode: string) => {
+    const target = seedByCode[countryCode];
+    if (!target) {
+      return;
+    }
+
+    setSelectedCode(target.countryCode);
+    setActivePanel("overview");
+    setActiveView("operations");
+
+    if (target.coordinates) {
+      setMapPosition((current) => ({
+        coordinates: target.coordinates as [number, number],
+        zoom: Math.max(current.zoom, 2.4)
+      }));
+    }
+  };
+
+  return (
+    <div className="app-shell">
+      <header className="hero-panel panel">
+        <div className="hero-copy">
+          <p className="eyebrow">Küresel kampanya istihbaratı</p>
+          <h1>FIG Seçim Strateji Odası</h1>
+          <p className="hero-text">
+            Suat Çelen için ülke bazlı oy takibi, ihtiyaç analizi, temas planı ve
+            delege dönüşümünü tek ekranda yöneten operasyon paneli.
+          </p>
+        </div>
+
+        <div className="hero-metrics">
+          <MetricCard
+            value="164"
+            label={metricCopy[0].label}
+            helper={metricCopy[0].helper}
+          />
+          <MetricCard
+            value={String(persuadableCount)}
+            label={metricCopy[1].label}
+            helper={metricCopy[1].helper}
+          />
+          <MetricCard
+            value={String(supporterCount)}
+            label={metricCopy[2].label}
+            helper={metricCopy[2].helper}
+          />
+        </div>
+      </header>
+
+      <section className="view-switch panel">
+        <div className="view-switch-copy">
+          <p className="section-kicker">Çalışma modları</p>
+          <h2>{activeView === "operations" ? "Operasyon ve dönüşüm masası" : "Resmi federasyon rehberi"}</h2>
+          <p className="section-note">
+            Strateji takibi ile FIG iletişim rehberini aynı uygulama içinde ayrı ve temiz akışlarla yönet.
+          </p>
+        </div>
+        <div className="view-switch-actions">
+          <button
+            className={activeView === "operations" ? "view-switch-button active" : "view-switch-button"}
+            onClick={() => setActiveView("operations")}
+            type="button"
+          >
+            Operasyon odası
+          </button>
+          <button
+            aria-label="FIG rehberi"
+            className={activeView === "directory" ? "view-switch-button active" : "view-switch-button"}
+            onClick={openDirectoryView}
+            type="button"
+          >
+            FIG rehberi
+          </button>
+        </div>
+      </section>
+
+      {activeView === "operations" ? (
+        <>
+      <section className="mobile-command-bar panel">
+        <div className="mobile-command-copy">
+          <p className="section-kicker">Mobil komuta akışı</p>
+          <h2>Başparmak dostu kontrol</h2>
+          <p className="section-note">
+            Filtreleri aç, ülke kartlarını çağır ve seçili ülkenin özetini tek akışta yönet.
+          </p>
+        </div>
+        <div className="mobile-command-actions">
+          <button
+            aria-label="Mobil kontrol merkezi"
+            className="mobile-command-button"
+            onClick={() => setMobileSheet("controls")}
+            type="button"
+          >
+            Mobil kontrol merkezi
+          </button>
+          <button
+            aria-label="Ülke kartları"
+            className="mobile-command-button accent"
+            onClick={() => setMobileSheet("countries")}
+            type="button"
+          >
+            Ülke kartları
+          </button>
+        </div>
+      </section>
+
+      {mobileSheet ? (
+        <div
+          className="mobile-sheet-backdrop"
+          onClick={() => setMobileSheet(null)}
+          role="presentation"
+        >
+          <section
+            aria-modal="true"
+            aria-label={mobileSheet === "controls" ? "Mobil kontrol merkezi" : "Hızlı ülke kartları"}
+            className="mobile-sheet panel"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+          >
+            <div className="mobile-sheet-head">
+              <div>
+                <p className="section-kicker">
+                  {mobileSheet === "controls" ? "Mobil kontrol" : "Hızlı seçim"}
+                </p>
+                <h2>
+                  {mobileSheet === "controls"
+                    ? "Mobil kontrol merkezi"
+                    : "Hızlı ülke kartları"}
+                </h2>
+              </div>
+              <button
+                aria-label="Çekmeceyi kapat"
+                className="sheet-close-button"
+                onClick={() => setMobileSheet(null)}
+                type="button"
+              >
+                Kapat
+              </button>
+            </div>
+
+            {mobileSheet === "controls" ? (
+              <div className="mobile-sheet-stack">
+                <label className="search-field">
+                  <span>Hızlı arama</span>
+                  <input
+                    aria-label="Mobil ülke arama"
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    placeholder="Ülke, başkan veya federasyon ara"
+                    type="search"
+                    value={searchQuery}
+                  />
+                </label>
+
+                <div className="mobile-sheet-block">
+                  <strong>Kıtalar</strong>
+                  <div className="token-grid">
+                    <button
+                      className={continentFilter === "all" ? "token active" : "token"}
+                      onClick={() => setContinentFilter("all")}
+                      type="button"
+                    >
+                      Tüm kıtalar
+                    </button>
+                    {(Object.keys(continentMeta) as ContinentCode[]).map((continentCode) => (
+                      <button
+                        key={continentCode}
+                        className={
+                          continentFilter === continentCode ? "token active" : "token"
+                        }
+                        onClick={() => setContinentFilter(continentCode)}
+                        type="button"
+                      >
+                        {continentMeta[continentCode].label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mobile-sheet-block">
+                  <strong>Destek durumu</strong>
+                  <div className="token-grid">
+                    {(["all", "supporter", "watch", "persuadable", "resistant"] as const).map(
+                      (status) => (
+                        <button
+                          key={status}
+                          className={statusFilter === status ? "token active" : "token"}
+                          onClick={() => setStatusFilter(status)}
+                          type="button"
+                        >
+                          {status === "all" ? "Tüm durumlar" : statusTone(status).label}
+                        </button>
+                      )
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="mobile-country-grid">
+                {quickCountries.map((country) => {
+                  const tone = statusTone(country.status);
+
+                  return (
+                    <button
+                      aria-label={`${country.countryName} hızlı kartı`}
+                      className={
+                        selectedCountry.countryCode === country.countryCode
+                          ? "quick-country-card active"
+                          : "quick-country-card"
+                      }
+                      key={`mobile-${country.countryCode}`}
+                      onClick={() => focusCountry(country, true)}
+                      type="button"
+                    >
+                      <div className="quick-country-top">
+                        <span
+                          className="status-pill"
+                          style={{
+                            background: tone.soft,
+                            color: tone.color,
+                            borderColor: tone.color
+                          }}
+                        >
+                          {tone.label}
+                        </span>
+                        <span className="country-code-inline">{country.countryCode}</span>
+                      </div>
+                      <strong>{country.countryName}</strong>
+                      <p>{primaryNeedLabel(country.primaryNeed)}</p>
+                      <small>{country.president || "Başkan bilgisi bekleniyor"}</small>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        </div>
+      ) : null}
+
+      <div className="layout-grid">
+        <aside className="control-rail panel">
+          <section className="panel-section">
+            <div className="section-head compact">
+              <div>
+                <p className="section-kicker">Kontrol katmanı</p>
+                <h2>Filtreler</h2>
+              </div>
+            </div>
+
+            <label className="search-field">
+              <span>Hızlı arama</span>
+              <input
+                aria-label="Ülke, başkan veya federasyon ara"
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Ülke, başkan veya federasyon ara"
+                type="search"
+                value={searchQuery}
+              />
+            </label>
+
+            <div className="token-grid">
+              <button
+                className={continentFilter === "all" ? "token active" : "token"}
+                onClick={() => setContinentFilter("all")}
+                type="button"
+              >
+                Tüm kıtalar
+              </button>
+              {(Object.keys(continentMeta) as ContinentCode[]).map((continentCode) => (
+                <button
+                  key={continentCode}
+                  className={
+                    continentFilter === continentCode ? "token active" : "token"
+                  }
+                  onClick={() => setContinentFilter(continentCode)}
+                  type="button"
+                >
+                  {continentMeta[continentCode].label}
+                </button>
+              ))}
+            </div>
+
+            <div className="token-grid">
+              {(["all", "supporter", "watch", "persuadable", "resistant"] as const).map(
+                (status) => (
+                  <button
+                    key={status}
+                    className={statusFilter === status ? "token active" : "token"}
+                    onClick={() => setStatusFilter(status)}
+                    type="button"
+                  >
+                    {status === "all" ? "Tüm durumlar" : statusTone(status).label}
+                  </button>
+                )
+              )}
+            </div>
+          </section>
+
+          <section className="panel-section">
+            <div className="section-head compact">
+              <div>
+                <p className="section-kicker">Kıta görünümü</p>
+                <h2>Oy blokları</h2>
+              </div>
+            </div>
+
+            <div className="continent-stack">
+              {(Object.entries(continentSummaries) as [
+                ContinentCode,
+                ReturnType<typeof buildContinentSummaries>[ContinentCode]
+              ][]).map(([continentCode, summaryBlock]) => (
+                <article className="continent-card" key={continentCode}>
+                  <div className="continent-card-top">
+                    <div>
+                      <h3>{continentMeta[continentCode].label}</h3>
+                      <p>{continentMeta[continentCode].description}</p>
+                    </div>
+                    <span
+                      className="continent-dot"
+                      style={{ backgroundColor: continentMeta[continentCode].accent }}
+                    />
+                  </div>
+
+                  <div className="continent-bar">
+                    <span
+                      style={{
+                        width: `${(summaryBlock.supporter / summaryBlock.total) * 100}%`,
+                        background: "#2ed8a3"
+                      }}
+                    />
+                    <span
+                      style={{
+                        width: `${(summaryBlock.watch / summaryBlock.total) * 100}%`,
+                        background: "#f6b34a"
+                      }}
+                    />
+                    <span
+                      style={{
+                        width: `${(summaryBlock.persuadable / summaryBlock.total) * 100}%`,
+                        background: "#ff6b57"
+                      }}
+                    />
+                    <span
+                      style={{
+                        width: `${(summaryBlock.resistant / summaryBlock.total) * 100}%`,
+                        background: "#7a7f90"
+                      }}
+                    />
+                  </div>
+
+                  <div className="continent-meta">
+                    <strong>{summaryBlock.total}</strong>
+                    <span>Ortalama ilişki {Math.round(summaryBlock.averageRelationship)}</span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className="panel-section queue-panel">
+            <div className="section-head compact">
+              <div>
+                <p className="section-kicker">Ülke masası</p>
+                <h2>Öncelik kuyruğu</h2>
+              </div>
+              <span className="section-badge">{filteredCountries.length} kayıt</span>
+            </div>
+
+            {filteredCountries.length > 0 ? (
+              <div className="country-list">
+                {filteredCountries.slice(0, 18).map((country) => {
+                  const tone = statusTone(country.status);
+
+                  return (
+                    <button
+                      aria-label={`${country.countryName} ${country.countryCode}`}
+                      className={
+                        selectedCountry.countryCode === country.countryCode
+                          ? "country-item active"
+                          : "country-item"
+                      }
+                      key={country.countryCode}
+                      onClick={() => focusCountry(country)}
+                      type="button"
+                    >
+                      <div className="country-item-top">
+                        <span
+                          className="status-pill"
+                          style={{
+                            background: tone.soft,
+                            color: tone.color,
+                            borderColor: tone.color
+                          }}
+                        >
+                          {tone.label}
+                        </span>
+                        <span className="priority-chip">
+                          {Math.round(country.priorityScore)}
+                        </span>
+                      </div>
+                      <strong>
+                        {country.countryName} <em>{country.countryCode}</em>
+                      </strong>
+                      <p>
+                        {primaryNeedLabel(country.primaryNeed)} •{" "}
+                        {country.president || "Başkan araştırması açık"}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="empty-state">{emptyCountryMessage}</p>
+            )}
+          </section>
+        </aside>
+
+        <main className="content-stage">
+          <section className="panel country-spotlight">
+            <div
+              className="country-spotlight-hero"
+              style={
+                {
+                  "--spotlight-accent": selectedContinent.accent,
+                  "--spotlight-accent-soft": `${selectedContinent.accent}24`,
+                  "--spotlight-status": selectedTone.color,
+                  "--spotlight-status-soft": `${selectedTone.color}24`
+                } as Record<string, string>
+              }
+            >
+              <div className="country-spotlight-copy">
+                <p className="section-kicker">Seçili ülke odağı</p>
+                <h2>
+                  {selectedCountry.countryName}{" "}
+                  <span className="country-code-inline">{selectedCountry.countryCode}</span>
+                </h2>
+                <strong>{spotlightTitle}</strong>
+                <p className="summary-copy">{summary}</p>
+                <div className="chips">
+                  <span className="need-chip">{selectedContinent.label}</span>
+                  <span className="need-chip">{primaryNeedLabel(selectedCountry.primaryNeed)}</span>
+                  <span className="need-chip">{selectedCountry.president}</span>
+                </div>
+              </div>
+
+              <div className="country-spotlight-meta">
+                <div className="spotlight-badge">
+                  <span>Öncelik</span>
+                  <strong>{Math.round(selectedCountry.priorityScore)}</strong>
+                </div>
+                <div className="spotlight-badge">
+                  <span>FIG gücü</span>
+                  <strong>{selectedCountry.figPowerIndex}</strong>
+                </div>
+              </div>
+            </div>
+
+            <div className="spotlight-signal-grid">
+              {spotlightSignals.map((item) => (
+                <article className="spotlight-signal-card" key={item.label}>
+                  <span>{item.label}</span>
+                  <strong>{item.value}</strong>
+                  <p>{item.body}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className="panel quick-select-stage">
+            <div className="section-head compact">
+              <div>
+                <p className="section-kicker">Hızlı ülke akışı</p>
+                <h2>Kaydır ve geç</h2>
+              </div>
+              <span className="section-badge">{quickCountries.length} hızlı kart</span>
+            </div>
+
+            <div className="quick-country-rail">
+              {quickCountries.map((country) => {
+                const tone = statusTone(country.status);
+
+                return (
+                  <button
+                    aria-label={`${country.countryName} hızlı geçiş kartı`}
+                    className={
+                      selectedCountry.countryCode === country.countryCode
+                        ? "quick-country-card active"
+                        : "quick-country-card"
+                    }
+                    key={`rail-${country.countryCode}`}
+                    onClick={() => focusCountry(country, true)}
+                    type="button"
+                  >
+                    <div className="quick-country-top">
+                      <span
+                        className="status-pill"
+                        style={{
+                          background: tone.soft,
+                          color: tone.color,
+                          borderColor: tone.color
+                        }}
+                      >
+                        {tone.label}
+                      </span>
+                      <span className="country-code-inline">{country.countryCode}</span>
+                    </div>
+                    <strong>{country.countryName}</strong>
+                    <p>{primaryNeedLabel(country.primaryNeed)}</p>
+                    <small>{country.president || "Başkan bilgisi bekleniyor"}</small>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className="panel map-stage">
+            <div className="section-head">
+              <div>
+                <p className="section-kicker">Küresel görünüm</p>
+                <h2>Dünya haritası</h2>
+              </div>
+              <p className="section-note">
+                İşaretler durumu gösterir; büyüklük ise temas önceliğini temsil eder.
+              </p>
+            </div>
+
+            <div className="legend-row">
+              {(["supporter", "watch", "persuadable", "resistant"] as SupportStatus[]).map(
+                (status) => {
+                  const tone = statusTone(status);
+                  return (
+                    <div className="legend-chip" key={status}>
+                      <span
+                        className="legend-dot"
+                        style={{ backgroundColor: tone.color }}
+                      />
+                      {tone.label}
+                    </div>
+                  );
+                }
+              )}
+              <div className="legend-chip muted">{mappedCountries.length} işaretli ülke</div>
+            </div>
+
+            <div className="map-toolbar">
+              <p className="section-note">
+                Küme işaretine tıklayarak bölgeyi aç. Yakın zoom seviyesinde üst üste
+                binen ülkeler otomatik dağıtılır.
+              </p>
+              <div className="map-controls">
+                <button
+                  aria-label="Uzaklaştır"
+                  className="map-control-button"
+                  onClick={handleZoomOut}
+                  type="button"
+                >
+                  -
+                </button>
+                <button
+                  aria-label="Yakınlaştır"
+                  className="map-control-button"
+                  onClick={handleZoomIn}
+                  type="button"
+                >
+                  +
+                </button>
+                <button
+                  aria-label="Haritayı sıfırla"
+                  className="map-control-button wide"
+                  onClick={handleResetMap}
+                  type="button"
+                >
+                  Sıfırla
+                </button>
+              </div>
+            </div>
+
+            <div className="map-frame">
+              <ComposableMap projection="geoEqualEarth" projectionConfig={{ scale: 155 }}>
+                <ZoomableGroup
+                  center={mapPosition.coordinates}
+                  onMoveEnd={(position: { coordinates: [number, number]; zoom: number }) =>
+                    setMapPosition({
+                      coordinates: position.coordinates,
+                      zoom: position.zoom
+                    })
+                  }
+                  zoom={mapPosition.zoom}
+                >
+                  <Geographies geography={worldGeoData}>
+                    {({ geographies }: { geographies: any[] }) =>
+                      geographies.map((geo: any) => (
+                        <Geography
+                          fill="rgba(216, 225, 238, 0.28)"
+                          key={geo.rsmKey}
+                          geography={geo}
+                          stroke="rgba(104,122,146,0.45)"
+                          strokeWidth={0.4}
+                        />
+                      ))
+                    }
+                  </Geographies>
+
+                  {mapNodes.map((node) => {
+                    if (node.kind === "cluster") {
+                      const tone = statusTone(node.status);
+                      const radius = 12 + Math.min(node.count * 1.2, 8);
+
+                      return (
+                        <Marker coordinates={node.coordinates} key={node.id}>
+                          <g
+                            className="map-cluster"
+                            onClick={() =>
+                              setMapPosition((current) => ({
+                                coordinates: node.coordinates,
+                                zoom: Math.min(current.zoom + 1, 4.8)
+                              }))
+                            }
+                          >
+                            <circle
+                              cx={0}
+                              cy={0}
+                              fill={tone.soft}
+                              r={radius + 6}
+                              stroke="none"
+                            />
+                            <circle
+                              cx={0}
+                              cy={0}
+                              fill={tone.color}
+                              r={radius}
+                              stroke="#ffffff"
+                              strokeWidth={1.1}
+                            />
+                            <text textAnchor="middle" x={0} y={4}>
+                              {node.count}
+                            </text>
+                            <title>
+                              {node.countries
+                                .map((country) => country.countryCode)
+                                .join(", ")}
+                            </title>
+                          </g>
+                        </Marker>
+                      );
+                    }
+
+                    const tone = statusTone(node.country.status);
+                    const isActive = node.country.countryCode === selectedCountry.countryCode;
+
+                    return (
+                      <Marker coordinates={node.coordinates} key={node.id}>
+                        <g
+                          className={isActive ? "map-marker active" : "map-marker"}
+                          onClick={() => focusCountry(node.country, true)}
+                        >
+                          <circle
+                            cx={0}
+                            cy={0}
+                            fill={tone.soft}
+                            r={node.radius + 7}
+                            stroke="none"
+                          />
+                          <circle
+                            cx={0}
+                            cy={0}
+                            fill={tone.color}
+                            r={node.radius}
+                            stroke="#ffffff"
+                            strokeWidth={1.1}
+                          />
+                          {node.labelVisible ? (
+                            <text x={node.radius + 7} y={4}>
+                              {node.country.countryCode}
+                            </text>
+                          ) : null}
+                          <title>
+                            {node.country.countryName} - {tone.label}
+                          </title>
+                        </g>
+                      </Marker>
+                    );
+                  })}
+                </ZoomableGroup>
+              </ComposableMap>
+            </div>
+
+            <div className="map-insight-grid">
+              <InsightCard
+                title="FIG içi etki"
+                value={String(selectedCountry.figPowerIndex)}
+                body="Kurumsal güç, resmî görev ve ağ erişimi birlikte okunur."
+              />
+              <InsightCard
+                title="İlişki sıcaklığı"
+                value={String(selectedCountry.relationshipStrength)}
+                body="Sayı yükseldikçe kapı açan temas bulmak kolaylaşır."
+              />
+              <InsightCard
+                title="Tesis puanı"
+                value={String(selectedCountry.facilityScore)}
+                body="Hazırlık, kamp ve organizasyon kapasitesinin hızlı özeti."
+              />
+              <InsightCard
+                title="Öncelik skoru"
+                value={String(Math.round(selectedCountry.priorityScore))}
+                body="Bu ülkeye ayrılması gereken temas yoğunluğu ve hız seviyesi."
+              />
+            </div>
+          </section>
+
+          <section className="summary-grid compact-stage">
+            <article className="panel dossier-card">
+              <div className="section-head compact">
+                <div>
+                  <p className="section-kicker">Seçili ülke</p>
+                  <h2>
+                    {selectedCountry.countryName}{" "}
+                    <span className="country-code-inline">{selectedCountry.countryCode}</span>
+                  </h2>
+                </div>
+                <span
+                  className="status-pill"
+                  style={{
+                    background: statusTone(selectedCountry.status).soft,
+                    color: statusTone(selectedCountry.status).color,
+                    borderColor: statusTone(selectedCountry.status).color
+                  }}
+                >
+                  {statusTone(selectedCountry.status).label}
+                </span>
+              </div>
+
+              <div className="profile-card">
+                <div className="profile-mark">
+                  <span>{selectedCountry.countryCode}</span>
+                </div>
+                <div className="profile-copy">
+                  <strong>{selectedCountry.president || "Başkan bilgisi bekleniyor"}</strong>
+                  <p>{selectedCountry.federationName}</p>
+                  <div className="mini-grid">
+                    <MiniMeta
+                      label="Sekreter genel"
+                      value={selectedCountry.secretaryGeneral || "Listede yok"}
+                    />
+                    <MiniMeta label="Başarı bandı" value={selectedCountry.countryRanking} />
+                    <MiniMeta
+                      label="Şehir"
+                      value={selectedCountry.city || "Listede yok"}
+                    />
+                    <MiniMeta
+                      label="Ana ihtiyaç"
+                      value={primaryNeedLabel(selectedCountry.primaryNeed)}
+                    />
+                    <MiniMeta
+                      label="Telefon"
+                      value={selectedCountry.phone || "Resmi kayıtta yok"}
+                    />
+                    <MiniMeta
+                      label="Adres"
+                      value={
+                        formatDirectoryAddress(selectedCountry) || "Resmi kayıtta yok"
+                      }
+                    />
+                  </div>
+                  <div className="link-row">
+                    {selectedCountry.email ? (
+                      <a className="link-pill" href={`mailto:${selectedCountry.email}`}>
+                        {selectedCountry.email}
+                      </a>
+                    ) : null}
+                    {selectedCountry.phone ? (
+                      <a className="link-pill" href={`tel:${selectedCountry.phone}`}>
+                        {selectedCountry.phone}
+                      </a>
+                    ) : null}
+                    {selectedCountry.website ? (
+                      <a
+                        className="link-pill"
+                        href={selectedCountry.website}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        Federasyon sitesi
+                      </a>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            </article>
+
+            <article className="panel dossier-card">
+              <div className="section-head compact">
+                <div>
+                  <p className="section-kicker">Özet okuma</p>
+                  <h2>Bu masanın kısa resmi</h2>
+                </div>
+              </div>
+              <p className="summary-copy">{summary}</p>
+              <div className="chips">
+                {operationChips.map((chip) => (
+                  <span className="need-chip" key={chip}>
+                    {chip}
+                  </span>
+                ))}
+              </div>
+
+              <div className="identity-list">
+                {identityLines.map((item) => (
+                  <article className="identity-row" key={item.label}>
+                    <span>{item.label}</span>
+                    <strong>{item.value}</strong>
+                  </article>
+                ))}
+              </div>
+            </article>
+          </section>
+
+          <section className="panel dossier-panel">
+            <div className="section-head">
+              <div>
+                <p className="section-kicker">Ülke dosyası</p>
+                <h2>Sade operasyon ekranı</h2>
+              </div>
+              <p className="section-note">
+                Aynı ülkenin tüm detayları dört okunur sekmede toplandı.
+              </p>
+            </div>
+
+            <div className="visual-summary-grid">
+              {dashboardMetrics.map((metric) => (
+                <VisualMetricCard key={metric.label} {...metric} />
+              ))}
+            </div>
+
+            <div className="tab-row" role="tablist" aria-label="Ülke dosyası sekmeleri">
+              <TabButton
+                active={activePanel === "overview"}
+                label="Genel dosya"
+                onClick={() => setActivePanel("overview")}
+              />
+              <TabButton
+                active={activePanel === "relations"}
+                label="İlişki ağı"
+                onClick={() => setActivePanel("relations")}
+              />
+              <TabButton
+                active={activePanel === "sports"}
+                label="Spor ve başarı"
+                onClick={() => setActivePanel("sports")}
+              />
+              <TabButton
+                active={activePanel === "congress"}
+                label="Kongre planı"
+                onClick={() => setActivePanel("congress")}
+              />
+            </div>
+
+            {activePanel === "overview" ? (
+              <div className="tab-stage">
+                <div className="tab-copy">
+                  <p className="section-kicker">Genel dosya</p>
+                  <h2>Karar ve temas zemini</h2>
+                  <p className="section-note">
+                    Başkan, FIG pozisyonu, ilk giriş kapıları ve eldeki temas hafızası.
+                  </p>
+                </div>
+
+                <div className="detail-grid">
+                  <DetailCard title="Karar verici mimarisi">
+                    <ul className="bullet-list">
+                      {selectedCountry.decisionArchitecture.map((item) => (
+                        <li key={item}>{translateStrategicText(item)}</li>
+                      ))}
+                    </ul>
+                  </DetailCard>
+
+                  <DetailCard title="Giriş kapıları ve temas dili">
+                    <div className="stack-list compact-list">
+                      <p>{powerNarrative}</p>
+                      <p>{judgeNarrative}</p>
+                    </div>
+                    <ul className="bullet-list compact-bullets">
+                      {selectedCountry.entryChannels.map((item) => (
+                        <li key={item}>{translateStrategicText(item)}</li>
+                      ))}
+                    </ul>
+                  </DetailCard>
+
+                  <DetailCard title="FIG içi pozisyon">
+                    <div className="stack-list compact-list">
+                      {roleDigest.map((role) => (
+                        <article className="role-card" key={`${role.title}-${role.body}`}>
+                          <strong>{role.title}</strong>
+                          <p>{role.body}</p>
+                          <small>{role.meta}</small>
+                        </article>
+                      ))}
+                    </div>
+                  </DetailCard>
+
+                  <DetailCard title="Temas günlüğü">
+                    <div className="stack-list">
+                      {selectedCountry.contactLog.map((entry) => (
+                        <article className="timeline-card" key={`${entry.date}-${entry.summary}`}>
+                          <div className="timeline-topline">
+                            <strong>{entry.date}</strong>
+                            <span>{channelLabel(entry.channel)}</span>
+                          </div>
+                          <p>{translateStrategicText(entry.summary)}</p>
+                          <small>
+                            {entry.actor} • Sonraki adım:{" "}
+                            {translateStrategicText(entry.nextStep)}
+                          </small>
+                        </article>
+                      ))}
+                    </div>
+                  </DetailCard>
+
+                  <DetailCard title="Operasyon notları">
+                    <form className="notes-form" onSubmit={handleAddNote}>
+                      <label className="form-field">
+                        <span>Not başlığı</span>
+                        <input
+                          aria-label="Not başlığı"
+                          onChange={(event) => setNoteTitle(event.target.value)}
+                          placeholder="Kısa başlık"
+                          type="text"
+                          value={noteTitle}
+                        />
+                      </label>
+                      <label className="form-field">
+                        <span>Not detayı</span>
+                        <textarea
+                          aria-label="Not detayı"
+                          onChange={(event) => setNoteBody(event.target.value)}
+                          placeholder="Görüşme sinyali, risk veya sonraki adımı yaz"
+                          rows={4}
+                          value={noteBody}
+                        />
+                      </label>
+                      <button className="primary-button" type="submit">
+                        Not ekle
+                      </button>
+                    </form>
+
+                    <div className="stack-list">
+                      {countryNotes.length > 0 ? (
+                        countryNotes.map((note) => (
+                          <article className="note-card" key={note.id}>
+                            <div className="timeline-topline">
+                              <strong>{note.title}</strong>
+                              <span>{note.createdAt}</span>
+                            </div>
+                            <p>{note.body}</p>
+                          </article>
+                        ))
+                      ) : (
+                        <p className="empty-state">
+                          Bu ülke için henüz elle eklenmiş operasyon notu yok.
+                        </p>
+                      )}
+                    </div>
+                  </DetailCard>
+
+                  <DetailCard title="Hızlı kimlik kartı">
+                    <div className="dual-copy">
+                      <div>
+                        <small>Konuşulan diller</small>
+                        <p>{selectedCountry.languages.map(translateLanguage).join(", ")}</p>
+                      </div>
+                      <div>
+                        <small>Disiplin sayısı</small>
+                        <p>{selectedCountry.disciplines.length} aktif alan</p>
+                      </div>
+                    </div>
+                    <ul className="bullet-list compact-bullets">
+                      {proofBullets.map((bullet) => (
+                        <li key={bullet}>{translateStrategicText(bullet)}</li>
+                      ))}
+                    </ul>
+                  </DetailCard>
+                </div>
+              </div>
+            ) : null}
+
+            {activePanel === "relations" ? (
+              <div className="tab-stage">
+                <div className="tab-copy">
+                  <p className="section-kicker">İlişki ağı</p>
+                  <h2>İlişki ağı görünümü</h2>
+                  <p className="section-note">
+                    Dost hatları, salınan masalar, rekabet alanları ve ikna başlıkları.
+                  </p>
+                </div>
+
+                <div className="stat-chip-row">
+                  <StatPill
+                    label="Yakın hat"
+                    value={String(relationCounts.ally)}
+                    tone="positive"
+                  />
+                  <StatPill
+                    label="Salınan masa"
+                    value={String(relationCounts.swing)}
+                    tone="watch"
+                  />
+                  <StatPill
+                    label="Rekabet alanı"
+                    value={String(relationCounts.competitive)}
+                    tone="risk"
+                  />
+                </div>
+
+                <div className="detail-grid">
+                  <DetailCard title="Ülkeler arası hatlar">
+                    <div className="stack-list">
+                      {selectedCountry.relationshipNetwork.map((relation) => (
+                        <article
+                          className={`relation-card ${relation.kind}`}
+                          key={`${relation.kind}-${relation.label}`}
+                        >
+                          <div className="task-topline">
+                            <strong>{translateStrategicText(relation.label)}</strong>
+                            <span className={`relation-badge ${relation.kind}`}>
+                              {relation.kind === "ally"
+                                ? "Müttefik"
+                                : relation.kind === "swing"
+                                  ? "Salınan"
+                                  : "Rekabet"}
+                            </span>
+                          </div>
+                          <p>{translateStrategicText(relation.note)}</p>
+                        </article>
+                      ))}
+                    </div>
+                  </DetailCard>
+
+                  <DetailCard title="Ülkenin beklentileri">
+                    <ul className="bullet-list">
+                      {selectedCountry.expectations.map((item) => (
+                        <li key={item}>{translateStrategicText(item)}</li>
+                      ))}
+                    </ul>
+                  </DetailCard>
+
+                  <DetailCard title="İkna paketi">
+                    <ul className="bullet-list">
+                      {selectedCountry.persuasionPayload.map((item) => (
+                        <li key={item}>{translateStrategicText(item)}</li>
+                      ))}
+                    </ul>
+                  </DetailCard>
+
+                  <DetailCard title="Kırmızı çizgiler">
+                    <ul className="bullet-list">
+                      {selectedCountry.redLines.map((bullet) => (
+                        <li key={bullet}>{translateStrategicText(bullet)}</li>
+                      ))}
+                    </ul>
+                  </DetailCard>
+                </div>
+              </div>
+            ) : null}
+
+            {activePanel === "sports" ? (
+              <div className="tab-stage">
+                <div className="tab-copy">
+                  <p className="section-kicker">Spor ve başarı</p>
+                  <h2>Spor ve başarı görünümü</h2>
+                  <p className="section-note">
+                    Sporcu kapasitesi, madalya izi, tesisleşme ve organizasyon gücü.
+                  </p>
+                </div>
+
+                <div className="visual-summary-grid compact-visuals">
+                  <VisualMetricCard
+                    label="Disiplin genişliği"
+                    score={Math.min(100, selectedCountry.disciplines.length * 12)}
+                    value={`${selectedCountry.disciplines.length} disiplin`}
+                    caption="Federasyonun aktif branş yayılımı."
+                  />
+                  <VisualMetricCard
+                    label="Sporcu kapasitesi"
+                    score={Math.min(95, Math.round(selectedCountry.influence * 0.6))}
+                    value="Milli havuz"
+                    caption="Etki seviyesi üzerinden okunan sporcu derinliği."
+                  />
+                  <VisualMetricCard
+                    label="Ev sahipliği gücü"
+                    score={Math.min(95, Math.round(selectedCountry.facilityScore * 0.75))}
+                    value="Organizasyon izi"
+                    caption="Turnuva, kamp ve salon kalitesinin birleşik görünümü."
+                  />
+                </div>
+
+                <div className="detail-grid">
+                  <DetailCard title="Milli takım ve sporcu kapasitesi">
+                    <p>{athleteNarrative}</p>
+                    <div className="metric-callout">
+                      {translateStrategicText(selectedCountry.athleteBaseEstimate)}
+                    </div>
+                    <ul className="bullet-list compact-bullets">
+                      {sportHighlights.map((item) => (
+                        <li key={item}>{translateStrategicText(item)}</li>
+                      ))}
+                    </ul>
+                  </DetailCard>
+
+                  <DetailCard title="Madalya ve başarı izi">
+                    <p>{translateStrategicText(selectedCountry.countryRanking)}</p>
+                    <ul className="bullet-list compact-bullets">
+                      {selectedCountry.medalHighlights.map((item) => (
+                        <li key={item}>{translateStrategicText(item)}</li>
+                      ))}
+                    </ul>
+                  </DetailCard>
+
+                  <DetailCard title="Organizasyon ve tesis izi">
+                    <p>{facilityNarrative}</p>
+                    <div className="chips">
+                      {selectedCountry.disciplines.map((discipline) => (
+                        <span className="need-chip" key={discipline}>
+                          {discipline}
+                        </span>
+                      ))}
+                    </div>
+                    <ul className="bullet-list compact-bullets">
+                      {facilityHighlights.map((item) => (
+                        <li key={item}>{translateStrategicText(item)}</li>
+                      ))}
+                    </ul>
+                  </DetailCard>
+                </div>
+              </div>
+            ) : null}
+
+            {activePanel === "congress" ? (
+              <div className="tab-stage">
+                <div className="tab-copy">
+                  <p className="section-kicker">Kongre planı</p>
+                  <h2>Kongre ve yol haritası</h2>
+                  <p className="section-note">
+                    Son temas, konuşma çerçevesi, araştırma boşlukları ve aylık rota.
+                  </p>
+                </div>
+
+                <div className="detail-grid">
+                  <DetailCard title="Kongre senaryosu">
+                    <ul className="bullet-list">
+                      {selectedCountry.congressScenario.map((item) => (
+                        <li key={item}>{translateStrategicText(item)}</li>
+                      ))}
+                    </ul>
+                  </DetailCard>
+
+                  <DetailCard title="Mesaj mimarisi">
+                    <ul className="bullet-list">
+                      {messageBullets.map((bullet) => (
+                        <li key={bullet}>{translateStrategicText(bullet)}</li>
+                      ))}
+                    </ul>
+                  </DetailCard>
+
+                  <DetailCard title="Açık istihbarat alanları">
+                    <div className="stack-list">
+                      {selectedCountry.researchTasks.map((task) => (
+                        <article className="task-card" key={task.title}>
+                          <div className="task-topline">
+                            <strong>{translateStrategicText(task.title)}</strong>
+                            <span className={`task-badge ${task.status}`}>
+                              {taskStatusLabel(task.status)}
+                            </span>
+                          </div>
+                          <p>{translateStrategicText(task.note)}</p>
+                          <small>{task.owner}</small>
+                        </article>
+                      ))}
+                    </div>
+                  </DetailCard>
+                </div>
+
+                <div className="roadmap-grid">
+                  {roadmap.map((step) => (
+                    <article className="roadmap-card" key={step.month}>
+                      <span className="roadmap-month">{step.month}</span>
+                      <h3>{step.focus}</h3>
+                      <p>{step.objective}</p>
+                      <strong>{step.deliverable}</strong>
+                    </article>
+                  ))}
+                </div>
+
+                <div className="strategic-strip">
+                  {strategicMoves.map((item) => (
+                    <article className="strategy-lane" key={item}>
+                      <strong>Stratejik hamle</strong>
+                      <p>{translateStrategicText(item)}</p>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </section>
+        </main>
+      </div>
+        </>
+      ) : (
+        <section className="directory-stage">
+          <section className="panel directory-hero">
+            <div className="directory-hero-copy">
+              <p className="section-kicker">Resmi iletişim katmanı</p>
+              <h2>FIG federasyon rehberi</h2>
+              <p className="section-note">
+                Affiliate federasyonların başkan, sekreter, telefon, e-posta, web ve adres bilgileri tek akışta.
+              </p>
+            </div>
+
+            <div className="hero-metrics directory-metrics">
+              {directoryMetrics.map((metric) => (
+                <MetricCard
+                  helper={metric.helper}
+                  key={metric.label}
+                  label={metric.label}
+                  value={metric.value}
+                />
+              ))}
+            </div>
+          </section>
+
+          <div className="directory-layout">
+            <aside className="panel directory-sidebar">
+              <section className="panel-section">
+                <div className="section-head compact">
+                  <div>
+                    <p className="section-kicker">Rehber filtresi</p>
+                    <h2>Kayıt tarama</h2>
+                  </div>
+                  <span className="section-badge">{filteredDirectory.length} kayıt</span>
+                </div>
+
+                <label className="search-field">
+                  <span>Federasyon ara</span>
+                  <input
+                    aria-label="Federasyon, başkan veya e-posta ara"
+                    onChange={(event) => setDirectorySearchQuery(event.target.value)}
+                    placeholder="Federasyon, başkan veya e-posta ara"
+                    type="search"
+                    value={directorySearchQuery}
+                  />
+                </label>
+
+                <div className="token-grid">
+                  <button
+                    className={
+                      directoryContinentFilter === "all" ? "token active" : "token"
+                    }
+                    onClick={() => setDirectoryContinentFilter("all")}
+                    type="button"
+                  >
+                    Tüm kıtalar
+                  </button>
+                  {(Object.keys(continentMeta) as ContinentCode[]).map((continentCode) => (
+                    <button
+                      key={`directory-${continentCode}`}
+                      className={
+                        directoryContinentFilter === continentCode
+                          ? "token active"
+                          : "token"
+                      }
+                      onClick={() => setDirectoryContinentFilter(continentCode)}
+                      type="button"
+                    >
+                      {continentMeta[continentCode].label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="token-grid directory-token-grid">
+                  {(
+                    [
+                      ["all", "Tüm kayıtlar"],
+                      ["priority", "Öncelikli masalar"],
+                      ["withRoles", "FIG rolü olanlar"],
+                      ["missingWebsite", "Web sitesi eksik"],
+                      ["missingPhone", "Telefon eksik"]
+                    ] as const
+                  ).map(([value, label]) => (
+                    <button
+                      key={value}
+                      className={
+                        directoryQuickFilter === value ? "token active" : "token"
+                      }
+                      onClick={() => setDirectoryQuickFilter(value)}
+                      type="button"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              <section className="panel-section">
+                <div className="section-head compact">
+                  <div>
+                    <p className="section-kicker">Seçili kayıt</p>
+                    <h2>Federasyon kartı</h2>
+                  </div>
+                </div>
+
+                <article className="directory-focus-card">
+                  <div className="directory-focus-top">
+                    <span className="need-chip">{selectedDirectoryContinent.label}</span>
+                    <span className="country-code-inline">{selectedDirectory.countryCode}</span>
+                  </div>
+                  <h3>{selectedDirectory.federationName}</h3>
+                  <p className="summary-copy">
+                    {selectedDirectory.city}
+                    {selectedDirectory.country ? ` / ${selectedDirectory.country}` : ""}
+                  </p>
+
+                  <div className="directory-field-list">
+                    <DirectoryField label="Başkan" value={selectedDirectory.president} />
+                    <DirectoryField
+                      label="Sekreter genel"
+                      value={selectedDirectory.secretaryGeneral}
+                    />
+                    <DirectoryField
+                      label="Telefon"
+                      value={
+                        selectedDirectory.phone ? "Hızlı arama düğmesi altta hazır" : ""
+                      }
+                    />
+                    <DirectoryField label="E-posta" value={selectedDirectory.email} />
+                    <DirectoryField label="Adres" value={selectedDirectoryAddress} />
+                  </div>
+
+                  {selectedDirectoryStrategy ? (
+                    <div className="directory-strategy-bridge">
+                      <div className="directory-bridge-top">
+                        <strong>Stratejik katman bağlı</strong>
+                        <span
+                          className="status-pill"
+                          style={{
+                            background: statusTone(selectedDirectoryStrategy.status).soft,
+                            color: statusTone(selectedDirectoryStrategy.status).color,
+                            borderColor: statusTone(selectedDirectoryStrategy.status).color
+                          }}
+                        >
+                          {statusTone(selectedDirectoryStrategy.status).label}
+                        </span>
+                      </div>
+                      <p className="section-note">
+                        {primaryNeedLabel(selectedDirectoryStrategy.primaryNeed)} odağı,{" "}
+                        {selectedDirectoryStrategy.figRoles.length} FIG rolü ve{" "}
+                        {Math.round(selectedDirectoryStrategy.priorityScore)} öncelik puanı ile
+                        strateji masasına bağlı.
+                      </p>
+                      <div className="chips">
+                        <span className="need-chip">
+                          FIG gücü {selectedDirectoryStrategy.figPowerIndex}
+                        </span>
+                        <span className="need-chip">
+                          {selectedDirectoryStrategy.figRoles.length} aktif FIG rolü
+                        </span>
+                        <span className="need-chip">
+                          {selectedDirectoryStrategy.relationshipStrength} ilişki sıcaklığı
+                        </span>
+                      </div>
+                      <button
+                        aria-label="Ülke dosyasını aç"
+                        className="primary-button secondary-button"
+                        onClick={() => openCountryDossier(selectedDirectory.countryCode)}
+                        type="button"
+                      >
+                        Ülke dosyasını aç
+                      </button>
+                    </div>
+                  ) : null}
+
+                  <div className="link-row">
+                    {selectedDirectory.email ? (
+                      <a
+                        aria-label={`${selectedDirectory.federationName} e-posta`}
+                        className="link-pill"
+                        href={`mailto:${selectedDirectory.email}`}
+                      >
+                        E-posta aç
+                      </a>
+                    ) : null}
+                    {selectedDirectory.phone ? (
+                      <a
+                        aria-label={`${selectedDirectory.federationName} telefonu`}
+                        className="link-pill"
+                        href={`tel:${selectedDirectory.phone}`}
+                      >
+                        Ara
+                      </a>
+                    ) : null}
+                    {selectedDirectory.website ? (
+                      <a
+                        aria-label={`${selectedDirectory.federationName} web sitesi`}
+                        className="link-pill"
+                        href={selectedDirectory.website}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        Siteyi aç
+                      </a>
+                    ) : null}
+                  </div>
+
+                  <div className="chips">
+                    {selectedDirectory.disciplines.map((discipline) => (
+                      <span className="need-chip" key={`directory-${discipline}`}>
+                        {discipline}
+                      </span>
+                    ))}
+                  </div>
+                </article>
+              </section>
+            </aside>
+
+            <section className="panel directory-browser">
+              <div className="section-head">
+                <div>
+                  <p className="section-kicker">Resmi tablo</p>
+                  <h2>Telefon ve yönetici listesi</h2>
+                </div>
+                <p className="section-note">
+                  Masaüstünde tablo, mobilde okunaklı kart listesi ile aynı veri gösterilir.
+                </p>
+              </div>
+
+              <div className="directory-table-shell">
+                <table className="directory-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Kod</th>
+                      <th scope="col">Federasyon</th>
+                      <th scope="col">Başkan</th>
+                      <th scope="col">Sekreter</th>
+                      <th scope="col">Telefon</th>
+                      <th scope="col">E-posta</th>
+                      <th scope="col">Web</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredDirectory.map((record) => (
+                      <tr
+                        className={
+                          selectedDirectory.countryCode === record.countryCode
+                            ? "directory-row active"
+                            : "directory-row"
+                        }
+                        key={`row-${record.countryCode}`}
+                      >
+                        <td>
+                          <button
+                            aria-label={`${record.countryCode} rehber kaydı`}
+                            className="table-row-button"
+                            onClick={() => setSelectedDirectoryCode(record.countryCode)}
+                            type="button"
+                          >
+                            {record.countryCode}
+                          </button>
+                        </td>
+                        <td>
+                          <strong>{record.federationName}</strong>
+                          <span>
+                            {record.city}
+                            {record.country ? ` / ${record.country}` : ""}
+                          </span>
+                        </td>
+                        <td>{record.president || "Kayıtta yok"}</td>
+                        <td>{record.secretaryGeneral || "Kayıtta yok"}</td>
+                        <td>{record.phone || "Kayıtta yok"}</td>
+                        <td>
+                          {record.email ? (
+                            <a href={`mailto:${record.email}`}>{record.email}</a>
+                          ) : (
+                            "Kayıtta yok"
+                          )}
+                        </td>
+                        <td>
+                          {record.website ? (
+                            <a href={record.website} rel="noreferrer" target="_blank">
+                              Site
+                            </a>
+                          ) : (
+                            "Kayıtta yok"
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="directory-mobile-list">
+                {filteredDirectory.map((record) => (
+                  <button
+                    className={
+                      selectedDirectory.countryCode === record.countryCode
+                        ? "directory-mobile-card active"
+                        : "directory-mobile-card"
+                    }
+                    key={`mobile-directory-${record.countryCode}`}
+                    onClick={() => setSelectedDirectoryCode(record.countryCode)}
+                    type="button"
+                  >
+                    <div className="directory-mobile-top">
+                      <span className="need-chip">{record.countryCode}</span>
+                      <span className="country-code-inline">
+                        {continentMeta[record.continent].label}
+                      </span>
+                    </div>
+                    <strong>{record.federationName}</strong>
+                    <p>
+                      {record.city}
+                      {record.country ? ` / ${record.country}` : ""}
+                    </p>
+                    <div className="directory-mobile-grid">
+                      <DirectoryField label="Başkan" value={record.president} />
+                      <DirectoryField
+                        label="Konum"
+                        value={`${record.city}${record.country ? ` / ${record.country}` : ""}`}
+                      />
+                      <DirectoryField label="E-posta" value={record.email} />
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </section>
+          </div>
+        </section>
+      )}
+    </div>
+  );
+};
+
+const MetricCard = ({
+  value,
+  label,
+  helper
+}: {
+  value: string;
+  label: string;
+  helper: string;
+}) => (
+  <article className="metric-card">
+    <span>{value}</span>
+    <strong>{label}</strong>
+    <p>{helper}</p>
+  </article>
+);
+
+const InsightCard = ({
+  title,
+  value,
+  body
+}: {
+  title: string;
+  value: string;
+  body: string;
+}) => (
+  <article className="insight-card">
+    <small>{title}</small>
+    <strong>{value}</strong>
+    <p>{body}</p>
+  </article>
+);
+
+const MiniMeta = ({ label, value }: { label: string; value: string }) => (
+  <div className="mini-meta">
+    <span>{label}</span>
+    <strong>{translateStrategicText(value)}</strong>
+  </div>
+);
+
+const DetailCard = ({
+  title,
+  children
+}: {
+  title: string;
+  children: ReactNode;
+}) => (
+  <article className="detail-card">
+    <h3>{title}</h3>
+    {children}
+  </article>
+);
+
+const VisualMetricCard = ({
+  label,
+  score,
+  value,
+  caption
+}: {
+  label: string;
+  score: number;
+  value: string;
+  caption: string;
+}) => (
+  <article className="visual-metric-card">
+    <div className="visual-metric-top">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+    <div aria-hidden="true" className="progress-track">
+      <span style={{ width: `${score}%` }} />
+    </div>
+    <p>{caption}</p>
+  </article>
+);
+
+const TabButton = ({
+  active,
+  label,
+  onClick
+}: {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}) => (
+  <button
+    aria-pressed={active}
+    className={active ? "tab-button active" : "tab-button"}
+    onClick={onClick}
+    type="button"
+  >
+    {label}
+  </button>
+);
+
+const StatPill = ({
+  label,
+  value,
+  tone
+}: {
+  label: string;
+  value: string;
+  tone: "positive" | "watch" | "risk";
+}) => (
+  <article className={`stat-pill ${tone}`}>
+    <span>{label}</span>
+    <strong>{value}</strong>
+  </article>
+);
+
+const DirectoryField = ({ label, value }: { label: string; value: string }) => (
+  <article className="directory-field">
+    <span>{label}</span>
+    <strong>{value || "Kayıtta yok"}</strong>
+  </article>
+);
+
+const formatDirectoryAddress = ({
+  addressLine1,
+  addressLine2,
+  city,
+  country
+}: Pick<
+  FederationDirectoryRecord,
+  "addressLine1" | "addressLine2" | "city" | "country"
+>) =>
+  [addressLine1, addressLine2, [city, country].filter(Boolean).join(" / ")]
+    .filter(Boolean)
+    .join(", ");

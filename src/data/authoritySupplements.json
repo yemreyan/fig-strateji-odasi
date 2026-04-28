@@ -1,0 +1,62 @@
+[
+  {
+    "role": "EG President",
+    "name": "GAYIBOV Farid",
+    "countryCode": "AZE",
+    "term": "2018 -",
+    "groupName": "European Gymnastics",
+    "groupType": "continental_union",
+    "source": "supplement",
+    "sourceUrl": "https://www.europeangymnastics.com"
+  },
+  {
+    "role": "AGU President",
+    "name": "ALSHATHRI Abdulrahman Ben Saad",
+    "countryCode": "QAT",
+    "term": "2007 -",
+    "groupName": "Asian Gymnastics Union",
+    "groupType": "continental_union",
+    "source": "supplement",
+    "sourceUrl": "https://agu-gymnastics.com"
+  },
+  {
+    "role": "UAG President",
+    "name": "ESAWY Ehab",
+    "countryCode": "EGY",
+    "term": "2022 -",
+    "groupName": "Union Africaine de Gymnastique",
+    "groupType": "continental_union",
+    "source": "supplement",
+    "sourceUrl": "https://www.uag-gymnastics.com"
+  },
+  {
+    "role": "PAGU President",
+    "name": "HERRERA Kenia",
+    "countryCode": "NCA",
+    "term": "2025 -",
+    "groupName": "Pan American Gymnastics Union",
+    "groupType": "continental_union",
+    "source": "supplement",
+    "sourceUrl": "https://www.panamgym.org"
+  },
+  {
+    "role": "OGU President",
+    "name": "CHILLER Kitty",
+    "countryCode": "AUS",
+    "term": "2025 -",
+    "groupName": "Oceania Gymnastics Union",
+    "groupType": "continental_union",
+    "source": "supplement",
+    "sourceUrl": "https://oceaniagymnastics.org"
+  },
+  {
+    "role": "Athletes' Representative",
+    "name": "VLADINOVA Neviana",
+    "countryCode": "BUL",
+    "term": "2026 -",
+    "groupName": "Athletes' Commission",
+    "groupType": "commission",
+    "source": "supplement",
+    "sourceUrl": "https://www.gymnastics.sport/site/pages/athletesCommission.php"
+  }
+]

@@ -303,6 +303,7 @@ const AppMain = () => {
 
   // Map
   const [mapPos, setMapPos] = useState<{ coordinates: [number, number]; zoom: number }>({ coordinates: [10, 12], zoom: 1 });
+  const [mapPreview, setMapPreview] = useState<string | null>(null); // null = bar gizli
   const mapRef = useRef<HTMLDivElement>(null);
 
   // Notes — synced from Firebase
@@ -332,6 +333,11 @@ const AppMain = () => {
     });
     return unsub;
   }, []);
+
+  // Harita dışına çıkınca mapPreview sıfırla
+  useEffect(() => {
+    if (view !== "map") setMapPreview(null);
+  }, [view]);
 
   // Fix map preserveAspectRatio — retry until SVG renders
   useEffect(() => {
@@ -571,7 +577,7 @@ const AppMain = () => {
                         geography={geo}
                         onClick={() => {
                           const seed = federationSeeds.find(c => CODE_TO_NUMERIC[c.countryCode] === numericId);
-                          if (seed) { setSelectedCode(seed.countryCode); setSheet("dossier"); setDossierTab("genel"); }
+                          if (seed) { setSelectedCode(seed.countryCode); setMapPreview(seed.countryCode); }
                         }}
                         style={{
                           default: { fill: status ? MAP_COLOR[status] : "#1C2A3A", stroke: "#0D1B2A", strokeWidth: 0.4, opacity: isSelected ? 1 : 0.85, outline: "none" },
@@ -600,13 +606,16 @@ const AppMain = () => {
               <button type="button" onClick={() => setMapPos({ coordinates:[10,12], zoom:1 })}>↺</button>
             </div>
 
-            {sheet !== "dossier" && selected && (
-              <div className="map-bar" onClick={() => { setDossierTab("genel"); setSheet("dossier"); }}>
-                <div>
+            {mapPreview && selected && (
+              <div className="map-bar">
+                <div style={{ minWidth: 0, flex: 1 }} onClick={() => { setDossierTab("genel"); setSheet("dossier"); }}>
                   <div className="map-bar-name">{trName(selected)} <span className="map-bar-code">{selected.countryCode}</span></div>
                   <div className="map-bar-sub">{STATUS_TR[selected.status]} · {continentMeta[selected.continent]?.label}</div>
                 </div>
-                <button className="map-bar-btn" type="button">Dosya Aç</button>
+                <div style={{ display:"flex", gap:8, alignItems:"center", flexShrink:0 }}>
+                  <button className="map-bar-btn" type="button" onClick={() => { setDossierTab("genel"); setSheet("dossier"); }}>Dosya Aç</button>
+                  <button type="button" className="map-bar-close" onClick={() => setMapPreview(null)}><IcX /></button>
+                </div>
               </div>
             )}
           </div>

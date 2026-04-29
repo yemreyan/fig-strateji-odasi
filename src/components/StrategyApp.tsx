@@ -6,6 +6,7 @@ import React, {
   useRef,
   useState
 } from "react";
+import { createPortal } from "react-dom";
 import { db, onValue, ref, remove, set, update } from "../lib/firebase";
 import {
   ComposableMap,
@@ -16,6 +17,7 @@ import {
 import worldGeoData from "world-atlas/countries-110m.json";
 import federationDirectoryData from "../data/federationDirectory.json";
 import { federationSeeds } from "../data/federationSeeds";
+import { athletesByCode } from "../data/athleteData";
 import {
   buildSportHighlights,
   buildStrategicSummary,
@@ -39,7 +41,7 @@ import type {
 type AppView = "dashboard" | "map" | "countries" | "notes";
 type Sheet = "dossier" | null;
 type FilterValue<T extends string> = T | "all";
-type DossierTab = "genel" | "iletisim" | "spor";
+type DossierTab = "genel" | "iletisim" | "branşlar" | "spor" | "istihbarat";
 
 // Notes
 type Note = { id: string; countryCode: string; countryName: string; title: string; body: string; date: string; completed?: boolean };
@@ -180,6 +182,39 @@ const MAP_COLOR: Record<SupportStatus, string> = {
   watch: "#F59E0B",
   persuadable: "#38BDF8",
   resistant: "#F87171"
+};
+
+// ── Branş yapısı ──────────────────────────────────────────────────────
+const DISCIPLINE_TR: Record<string, { label: string; color: string }> = {
+  MAG:  { label: "Erkekler Artistik",  color: "#38BDF8" },
+  WAG:  { label: "Kadınlar Artistik",  color: "#F472B6" },
+  RG:   { label: "Ritmik Jimnastik",   color: "#A78BFA" },
+  TRA:  { label: "Trampolin",          color: "#34D399" },
+  ACRO: { label: "Akrobatik",          color: "#FBBF24" },
+  AER:  { label: "Aerobik",            color: "#F87171" },
+  PK:   { label: "Parkur",             color: "#6EE7B7" },
+  GFA:  { label: "Herkese Jimnastik",  color: "#93C5FD" },
+};
+
+const disciplineKeywords: Record<string, string[]> = {
+  MAG:  ["MAG","men's artistic","erkek artistik","men artistic","floor","pommel","rings","vault men","parallel","high bar","rings"],
+  WAG:  ["WAG","women's artistic","kadın artistik","women artistic","artistic gymn","beam","uneven","floor exercise"],
+  RG:   ["RG","rhythmic","ritmik","ribbon","hoop","ball","clubs","rope"],
+  TRA:  ["TRA","trampoline","tramplen","trampolining"],
+  ACRO: ["ACRO","acrobatic","akrobatik","acro"],
+  AER:  ["AER","aerobic","aerobik","aerobics"],
+  PK:   ["PK","parkour","parkur"],
+  GFA:  ["GFA","general","gymnastics for all","herkese","for all"],
+};
+
+const getHighlightsForDiscipline = (seed: FederationSeed, disc: string): string[] => {
+  const kws = disciplineKeywords[disc] ?? [];
+  const pool = [
+    ...(seed.medalHighlights ?? []),
+    ...(seed.nationalTeamHighlights ?? []),
+    ...(seed.achievements ?? []),
+  ];
+  return pool.filter(h => kws.some(kw => h.toLowerCase().includes(kw.toLowerCase())));
 };
 
 // Country code → ISO numeric (IOC federation code → world-atlas topoJSON id)
@@ -324,6 +359,9 @@ const AppMain = () => {
   const [mapPreview, setMapPreview] = useState<string | null>(null); // null = bar gizli
   const mapRef = useRef<HTMLDivElement>(null);
 
+  // Dossier UI
+  const [showScoreInfo, setShowScoreInfo] = useState(false);
+
   // Notes — synced from Firebase
   const [notes, setNotes] = useState<Note[]>([]);
   const [noteTitle, setNoteTitle] = useState("");
@@ -432,6 +470,7 @@ const AppMain = () => {
   const openDossier = (code: string) => {
     setSelectedCode(code);
     setDossierTab("genel");
+    setShowScoreInfo(false);
     setSheet("dossier");
   };
 
@@ -580,6 +619,7 @@ const AppMain = () => {
 
         {/* ══ HARİTA ══ */}
         {view === "map" && (
+          <>
           <div className="map-container" ref={mapRef}>
             <ComposableMap projectionConfig={{ rotate: [-10, 0, 0], scale: 130 }} style={{ width: "100%", height: "100%" }}>
               <ZoomableGroup
@@ -627,19 +667,24 @@ const AppMain = () => {
               <button type="button" onClick={() => setMapPos({ coordinates:[10,12], zoom:1 })}>↺</button>
             </div>
 
-            {mapPreview && selected && (
+          </div>
+
+          {/* map-bar → map-container DIŞINDA, main içinde absolute — SVG touch event rekabeti yok */}
+          {mapPreview && selected && (
+            <div className="map-bar-overlay">
               <div className="map-bar">
-                <div style={{ minWidth: 0, flex: 1 }} onClick={() => { setDossierTab("genel"); setSheet("dossier"); }}>
+                <div style={{ minWidth: 0, flex: 1 }} onClick={() => { setDossierTab("genel"); setShowScoreInfo(false); setSheet("dossier"); }}>
                   <div className="map-bar-name">{trName(selected)} <span className="map-bar-code">{selected.countryCode}</span></div>
                   <div className="map-bar-sub">{STATUS_TR[selected.status]} · {continentMeta[selected.continent]?.label}</div>
                 </div>
                 <div style={{ display:"flex", gap:8, alignItems:"center", flexShrink:0 }}>
-                  <button className="map-bar-btn" type="button" onClick={() => { setDossierTab("genel"); setSheet("dossier"); }}>Dosya Aç</button>
+                  <button className="map-bar-btn" type="button" onClick={() => { setDossierTab("genel"); setShowScoreInfo(false); setSheet("dossier"); }}>Dosya Aç</button>
                   <button type="button" className="map-bar-close" onClick={() => setMapPreview(null)}><IcX /></button>
                 </div>
               </div>
-            )}
-          </div>
+            </div>
+          )}
+          </>
         )}
 
         {/* ══ FEDERASYONLAR ══ */}
@@ -674,21 +719,39 @@ const AppMain = () => {
 
             <div className="list-count">{filtered.length} federasyon</div>
 
-            {filtered.map(c => (
+            {filtered.map(c => {
+              const dirEntry = directoryByCode[c.countryCode];
+              return (
               <div key={c.countryCode} className="country-card" onClick={() => openDossier(c.countryCode)}>
                 <div className="country-card-left">
                   <div className="country-card-code">{c.countryCode}</div>
-                  <div>
+                  <div style={{ minWidth: 0 }}>
                     <div className="country-card-name">{trName(c)}</div>
                     <div className="country-card-sub">{continentMeta[c.continent]?.label} · {c.president}</div>
+                    {dirEntry?.disciplines && dirEntry.disciplines.length > 0 && (
+                      <div className="card-disciplines">
+                        {dirEntry.disciplines.slice(0, 5).map(d => (
+                          <span key={d} className="card-disc-chip"
+                            style={{ borderColor: DISCIPLINE_TR[d]?.color ?? "var(--border)", color: DISCIPLINE_TR[d]?.color ?? "var(--muted)" }}>
+                            {d}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="country-card-right">
                   <span className={`badge ${STATUS_CSS[c.status]}`}>{STATUS_TR[c.status]}</span>
                   <span className="country-card-score">{fmtScore(c.priorityScore)}</span>
+                  {(c.facilityScore ?? 0) > 0 && (
+                    <div className="card-facility-mini" title={`Tesis: ${c.facilityScore}/100`}>
+                      <div className="card-facility-fill" style={{ width: `${c.facilityScore}%` }} />
+                    </div>
+                  )}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -783,271 +846,517 @@ const AppMain = () => {
       </main>
     </div>{/* /shell */}
 
-    {/* ── Dossier Sheet — shell dışında, position:fixed viewport'a göre ── */}
-    {sheet === "dossier" && selected && (
-        <>
-          <div className="sheet-backdrop" onClick={() => setSheet(null)} />
-          <div className="dossier-sheet">
-            <div className="sheet-handle" />
+    {/* ── Dossier Sheet — createPortal ile document.body'e eklenir, tüm stacking context dışında ── */}
+    {sheet === "dossier" && selected && createPortal(
+      <>
+        <div className="sheet-backdrop" onClick={() => setSheet(null)} />
+        <div className="dossier-sheet">
+          <div className="sheet-handle" />
 
-            {/* Header */}
-            <div className="ds-header">
-              <div style={{ minWidth:0, flex:1 }}>
-                <div className="ds-title">{trName(selected)}</div>
-                <div className="ds-meta">{continentMeta[selected.continent]?.label} · {selected.president}</div>
-              </div>
-              <div style={{ display:"flex", alignItems:"center", gap:"10px", flexShrink:0 }}>
-                <button type="button" className="sheet-x" onClick={() => setSheet(null)}><IcX /></button>
+          {/* Header */}
+          <div className="ds-header">
+            <div style={{ minWidth:0, flex:1 }}>
+              <div className="ds-title">{trName(selected)}</div>
+              <div className="ds-meta">{continentMeta[selected.continent]?.label} · {selected.president}</div>
+            </div>
+            <div style={{ display:"flex", alignItems:"center", gap:"10px", flexShrink:0 }}>
+              <button type="button" className="sheet-x" onClick={() => setSheet(null)}><IcX /></button>
+            </div>
+          </div>
+
+          {/* Status changer */}
+          <div className="ds-status-row">
+            {(["supporter","persuadable","watch","resistant"] as SupportStatus[]).map(s => (
+              <button
+                key={s}
+                type="button"
+                className={`status-chip ${selected.status === s ? "status-chip-active " + STATUS_CSS[s] : ""}`}
+                onClick={() => setOverride(selectedCode, { status: s })}
+              >
+                {STATUS_TR[s]}
+              </button>
+            ))}
+          </div>
+
+          {/* Key metrics */}
+          <div className="ds-metrics">
+            <div className="ds-metric ds-metric-clickable" onClick={() => setShowScoreInfo(v => !v)}>
+              <div className="ds-metric-val">{fmtScore(selected.priorityScore)}</div>
+              <div className="ds-metric-key">Öncelik <span className="score-info-icon">?</span></div>
+            </div>
+            <div className="ds-metric">
+              <div className="ds-metric-val">{selected.figPowerIndex}</div>
+              <div className="ds-metric-key">FIG Gücü</div>
+            </div>
+            <div className="ds-metric">
+              <div className="ds-metric-val">{selected.relationshipStrength}</div>
+              <div className="ds-metric-key">İlişki</div>
+            </div>
+            <div className="ds-metric">
+              <div className="ds-metric-val">{(selected.figRoles ?? []).length}</div>
+              <div className="ds-metric-key">FIG Rolü</div>
+            </div>
+          </div>
+
+          {/* Skor açıklaması */}
+          {showScoreInfo && (
+            <div className="score-info-box">
+              <div className="score-info-title">Öncelik Puanı Nasıl Hesaplanır?</div>
+              <div className="score-info-formula">Durum + İhtiyaç + Etki × 0.42 + (100 − İlişki) × 0.28</div>
+              <div className="score-info-rows">
+                <div className="score-info-row"><span>Destekçi</span><b>18</b></div>
+                <div className="score-info-row"><span>İzle</span><b>50</b></div>
+                <div className="score-info-row"><span>İkna Edilebilir</span><b>84</b></div>
+                <div className="score-info-row"><span>Dirençli</span><b>12</b></div>
+                <div className="score-info-row"><span>Gelişim ihtiyacı</span><b>+18</b></div>
+                <div className="score-info-row"><span>Finansman ihtiyacı</span><b>+17</b></div>
+                <div className="score-info-row"><span>Yönetişim ihtiyacı</span><b>+15</b></div>
               </div>
             </div>
+          )}
 
-            {/* Status changer */}
-            <div className="ds-status-row">
-              {(["supporter","persuadable","watch","resistant"] as SupportStatus[]).map(s => (
-                <button
-                  key={s}
-                  type="button"
-                  className={`status-chip ${selected.status === s ? "status-chip-active " + STATUS_CSS[s] : ""}`}
-                  onClick={() => setOverride(selectedCode, { status: s })}
-                >
-                  {STATUS_TR[s]}
+          {/* Tabs */}
+          <div className="ds-tabs">
+            {(["genel","iletisim","branşlar","spor","istihbarat"] as DossierTab[]).map(t => {
+              const labels: Record<DossierTab,string> = {
+                genel:"Strateji", iletisim:"İletişim", "branşlar":"Branşlar", spor:"Spor", istihbarat:"İstihbarat"
+              };
+              return (
+                <button key={t} type="button" className={`ds-tab-btn ${dossierTab===t?"active":""}`} onClick={() => setDossierTab(t)}>
+                  {labels[t]}
                 </button>
-              ))}
-            </div>
+              );
+            })}
+          </div>
 
-            {/* Key metrics */}
-            <div className="ds-metrics">
-              <div className="ds-metric">
-                <div className="ds-metric-val">{fmtScore(selected.priorityScore)}</div>
-                <div className="ds-metric-key">Öncelik</div>
-              </div>
-              <div className="ds-metric">
-                <div className="ds-metric-val">{selected.figPowerIndex}</div>
-                <div className="ds-metric-key">FIG Gücü</div>
-              </div>
-              <div className="ds-metric">
-                <div className="ds-metric-val">{selected.relationshipStrength}</div>
-                <div className="ds-metric-key">İlişki</div>
-              </div>
-              <div className="ds-metric">
-                <div className="ds-metric-val">{(selected.figRoles ?? []).length}</div>
-                <div className="ds-metric-key">FIG Rolü</div>
-              </div>
-            </div>
+          <div className="ds-scroll">
+            {/* ── STRATEJİ ── */}
+            {dossierTab === "genel" && (
+              <>
+                <div className="ds-block">
+                  <div className="ds-block-label">Ne İstiyor?</div>
+                  <div className="ds-block-val">{primaryNeedLabel(selected.primaryNeed)}</div>
+                </div>
 
-            {/* Tabs */}
-            <div className="ds-tabs">
-              {(["genel","iletisim","spor"] as DossierTab[]).map(t => {
-                const labels: Record<DossierTab,string> = { genel:"Strateji", iletisim:"İletişim", spor:"Spor" };
-                return (
-                  <button key={t} type="button" className={`ds-tab-btn ${dossierTab===t?"active":""}`} onClick={() => setDossierTab(t)}>
-                    {labels[t]}
-                  </button>
-                );
-              })}
-            </div>
+                <EditableBlock
+                  label="Stratejik Değerlendirme"
+                  value={getAssessment(selected)}
+                  onSave={v => setOverride(selectedCode, { assessment: v })}
+                />
 
-            <div className="ds-scroll">
-              {/* ── STRATEJİ ── */}
-              {dossierTab === "genel" && (
-                <>
-                  <div className="ds-block">
-                    <div className="ds-block-label">Ne İstiyor?</div>
-                    <div className="ds-block-val">{primaryNeedLabel(selected.primaryNeed)}</div>
-                  </div>
-
+                {getEntryChannel(selected) && (
                   <EditableBlock
-                    label="Stratejik Değerlendirme"
-                    value={getAssessment(selected)}
-                    onSave={v => setOverride(selectedCode, { assessment: v })}
+                    label="Temas Kanalı"
+                    value={getEntryChannel(selected)}
+                    onSave={v => setOverride(selectedCode, { entryChannel: v })}
                   />
+                )}
 
-                  {getEntryChannel(selected) && (
-                    <EditableBlock
-                      label="Temas Kanalı"
-                      value={getEntryChannel(selected)}
-                      onSave={v => setOverride(selectedCode, { entryChannel: v })}
-                    />
-                  )}
+                {getRedLine(selected) && (
+                  <EditableBlock
+                    label="Dikkat Edilecek"
+                    value={getRedLine(selected)}
+                    onSave={v => setOverride(selectedCode, { redLine: v })}
+                    warn
+                  />
+                )}
 
-                  {getRedLine(selected) && (
-                    <EditableBlock
-                      label="Dikkat Edilecek"
-                      value={getRedLine(selected)}
-                      onSave={v => setOverride(selectedCode, { redLine: v })}
-                      warn
-                    />
-                  )}
-
-                  {/* Notes in strategy tab */}
-                  <div className="ds-notes-header">
-                    <span className="ds-block-label">Notlar {countryNotes.length > 0 && <span className="note-count">{countryNotes.length}</span>}</span>
+                {/* Notes in strategy tab */}
+                <div className="ds-notes-header">
+                  <span className="ds-block-label">Notlar {countryNotes.length > 0 && <span className="note-count">{countryNotes.length}</span>}</span>
+                  <div style={{ display:"flex", gap:8 }}>
+                    <button type="button" className="ds-notes-add-btn" onClick={() => setShowNoteForm(v => !v)}>
+                      <IcPlus /> Not Ekle
+                    </button>
+                    <button type="button" className="ds-notes-all-btn" onClick={() => { setNoteReturnCode(selectedCode); setSheet(null); setView("notes"); }}>
+                      Tümü →
+                    </button>
+                  </div>
+                </div>
+                {showNoteForm && (
+                  <form className="note-form" onSubmit={e => { addNote(e); setShowNoteForm(false); }}>
+                    <input className="note-input" placeholder="Not başlığı" value={noteTitle} onChange={e => setNoteTitle(e.target.value)} required />
+                    <textarea className="note-textarea" placeholder="Not içeriği…" rows={3} value={noteBody} onChange={e => setNoteBody(e.target.value)} required />
                     <div style={{ display:"flex", gap:8 }}>
-                      <button type="button" className="ds-notes-add-btn" onClick={() => setShowNoteForm(v => !v)}>
-                        <IcPlus /> Not Ekle
-                      </button>
-                      <button type="button" className="ds-notes-all-btn" onClick={() => { setNoteReturnCode(selectedCode); setSheet(null); setView("notes"); }}>
-                        Tümü →
-                      </button>
+                      <button className="note-submit" type="submit">Kaydet</button>
+                      <button className="note-cancel" type="button" onClick={() => { setShowNoteForm(false); setNoteTitle(""); setNoteBody(""); }}>İptal</button>
                     </div>
-                  </div>
-                  {showNoteForm && (
-                    <form className="note-form" onSubmit={e => { addNote(e); setShowNoteForm(false); }}>
-                      <input className="note-input" placeholder="Not başlığı" value={noteTitle} onChange={e => setNoteTitle(e.target.value)} required />
-                      <textarea className="note-textarea" placeholder="Not içeriği…" rows={3} value={noteBody} onChange={e => setNoteBody(e.target.value)} required />
-                      <div style={{ display:"flex", gap:8 }}>
-                        <button className="note-submit" type="submit">Kaydet</button>
-                        <button className="note-cancel" type="button" onClick={() => { setShowNoteForm(false); setNoteTitle(""); setNoteBody(""); }}>İptal</button>
+                  </form>
+                )}
+                {countryNotes.map(n => (
+                  <div key={n.id} className={`note-card ${n.completed ? "note-card-done" : ""}`} style={{ marginTop: 8 }}>
+                    <div className="note-card-header">
+                      <button type="button" className="note-complete-btn" onClick={() => toggleNoteComplete(n.id, !n.completed)}>
+                        <IcCheckCircle done={n.completed} />
+                      </button>
+                      <span className={`note-card-title ${n.completed ? "note-title-done" : ""}`}>{n.title}</span>
+                      <div style={{ display:"flex", gap:"8px", alignItems:"center", marginLeft:"auto" }}>
+                        <span className="note-card-date">{n.date}</span>
+                        <button className="note-delete" type="button" onClick={() => deleteNote(n.id)}><IcX /></button>
                       </div>
-                    </form>
-                  )}
-                  {countryNotes.map(n => (
-                    <div key={n.id} className={`note-card ${n.completed ? "note-card-done" : ""}`} style={{ marginTop: 8 }}>
-                      <div className="note-card-header">
-                        <button type="button" className="note-complete-btn" onClick={() => toggleNoteComplete(n.id, !n.completed)}>
-                          <IcCheckCircle done={n.completed} />
-                        </button>
-                        <span className={`note-card-title ${n.completed ? "note-title-done" : ""}`}>{n.title}</span>
-                        <div style={{ display:"flex", gap:"8px", alignItems:"center", marginLeft:"auto" }}>
-                          <span className="note-card-date">{n.date}</span>
-                          <button className="note-delete" type="button" onClick={() => deleteNote(n.id)}><IcX /></button>
-                        </div>
-                      </div>
-                      {!n.completed && <div className="note-card-body">{n.body}</div>}
                     </div>
-                  ))}
-                </>
-              )}
-
-              {/* ── İLETİŞİM ── */}
-              {dossierTab === "iletisim" && (
-                <>
-                  <div className="ds-block">
-                    <div className="ds-block-label">Federasyon</div>
-                    <div className="ds-block-val" style={{ fontSize: 14 }}>{selectedDir?.federationName ?? selected.federationName}</div>
+                    {!n.completed && <div className="note-card-body">{n.body}</div>}
                   </div>
+                ))}
+              </>
+            )}
 
+            {/* ── İLETİŞİM ── */}
+            {dossierTab === "iletisim" && (
+              <>
+                <div className="ds-block">
+                  <div className="ds-block-label">Federasyon</div>
+                  <div className="ds-block-val" style={{ fontSize: 14 }}>{selectedDir?.federationName ?? selected.federationName}</div>
+                </div>
+
+                <div className="ds-block">
+                  <div className="ds-block-label">Başkan</div>
+                  <div className="contact-row">
+                    <div className="contact-main">{selected.president}</div>
+                  </div>
+                </div>
+
+                {selectedDir?.secretaryGeneral && (
                   <div className="ds-block">
-                    <div className="ds-block-label">Başkan</div>
+                    <div className="ds-block-label">Genel Sekreter</div>
                     <div className="contact-row">
-                      <div className="contact-main">{selected.president}</div>
+                      <div className="contact-main">{selectedDir.secretaryGeneral}</div>
                     </div>
                   </div>
+                )}
 
-                  {selectedDir?.secretaryGeneral && (
-                    <div className="ds-block">
-                      <div className="ds-block-label">Genel Sekreter</div>
-                      <div className="contact-row">
-                        <div className="contact-main">{selectedDir.secretaryGeneral}</div>
+                {selectedDir?.email && (
+                  <div className="ds-block">
+                    <div className="ds-block-label">E-posta</div>
+                    <div className="contact-row">
+                      <div className="contact-main contact-link">{selectedDir.email}</div>
+                    </div>
+                  </div>
+                )}
+
+                {selectedDir?.phone && (
+                  <div className="ds-block">
+                    <div className="ds-block-label">Telefon</div>
+                    <div className="contact-main">{selectedDir.phone}</div>
+                  </div>
+                )}
+
+                {selectedDir?.website && (
+                  <div className="ds-block">
+                    <div className="ds-block-label">Website</div>
+                    <div className="contact-main contact-link">{selectedDir.website}</div>
+                  </div>
+                )}
+
+                {(selectedDir?.addressLine1 || selectedDir?.city) && (
+                  <div className="ds-block">
+                    <div className="ds-block-label">Adres</div>
+                    <div className="ds-block-text">
+                      {[selectedDir?.addressLine1, selectedDir?.addressLine2, selectedDir?.city, selectedDir?.country].filter(Boolean).join(", ")}
+                    </div>
+                  </div>
+                )}
+
+                {selectedDir?.disciplines && selectedDir.disciplines.length > 0 && (
+                  <div className="ds-block">
+                    <div className="ds-block-label">Branşlar</div>
+                    <div className="discipline-chips">
+                      {selectedDir.disciplines.map(d => (
+                        <span key={d} className="discipline-chip">{d}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* ── BRANŞLAR ── */}
+            {dossierTab === "branşlar" && (() => {
+              const disciplines = selectedDir?.disciplines ?? [];
+              const athletes = athletesByCode[selectedCode] ?? [];
+              if (disciplines.length === 0 && athletes.length === 0) {
+                return <div className="empty-state">Bu federasyon için branş verisi bulunamadı.</div>;
+              }
+              return (
+                <>
+                  {disciplines.map(disc => {
+                    const discInfo = DISCIPLINE_TR[disc];
+                    const highlights = getHighlightsForDiscipline(selected, disc);
+                    const discAthletes = athletes.filter(a => a.discipline === disc);
+                    return (
+                      <div key={disc} className="discipline-section">
+                        <div className="discipline-section-header" style={{ borderLeftColor: discInfo?.color ?? "var(--blue)" }}>
+                          <span className="discipline-section-code" style={{ color: discInfo?.color ?? "var(--blue)" }}>{disc}</span>
+                          <span className="discipline-section-label">{discInfo?.label ?? disc}</span>
+                        </div>
+
+                        {/* Sporcular */}
+                        {discAthletes.length > 0 && (
+                          <div className="athlete-list">
+                            {discAthletes.map((a, i) => (
+                              <div key={i} className="athlete-card">
+                                <div className="athlete-card-top">
+                                  <span className="athlete-name">{a.name}</span>
+                                  {a.active === false && <span className="athlete-retired">Emekli</span>}
+                                  {a.active === true && <span className="athlete-active">Aktif</span>}
+                                </div>
+                                <ul className="athlete-highlights">
+                                  {a.highlights.map((h, j) => (
+                                    <li key={j}>{h}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Genel başarı metinleri */}
+                        {highlights.length > 0 && (
+                          <div className="discipline-highlights">
+                            {highlights.slice(0, 3).map((h, i) => (
+                              <div key={i} className="achievement-row">
+                                <span className="achievement-bullet">▸</span>
+                                <span className="achievement-text">{translateStrategicText(h)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {discAthletes.length === 0 && highlights.length === 0 && (
+                          <div className="discipline-empty">Kayıtlı sporcu/başarı verisi yok</div>
+                        )}
                       </div>
-                    </div>
-                  )}
+                    );
+                  })}
 
-                  {selectedDir?.email && (
-                    <div className="ds-block">
-                      <div className="ds-block-label">E-posta</div>
-                      <div className="contact-row">
-                        <div className="contact-main contact-link">{selectedDir.email}</div>
+                  {/* Branşı listelenemeyen sporcular (tüm branş listenin dışı) */}
+                  {athletes.filter(a => !disciplines.includes(a.discipline)).length > 0 && (
+                    <div className="discipline-section">
+                      <div className="discipline-section-header" style={{ borderLeftColor: "var(--muted)" }}>
+                        <span className="discipline-section-label" style={{ color:"var(--muted)" }}>Diğer Branşlar</span>
                       </div>
-                    </div>
-                  )}
-
-                  {selectedDir?.phone && (
-                    <div className="ds-block">
-                      <div className="ds-block-label">Telefon</div>
-                      <div className="contact-main">{selectedDir.phone}</div>
-                    </div>
-                  )}
-
-                  {selectedDir?.website && (
-                    <div className="ds-block">
-                      <div className="ds-block-label">Website</div>
-                      <div className="contact-main contact-link">{selectedDir.website}</div>
-                    </div>
-                  )}
-
-                  {(selectedDir?.addressLine1 || selectedDir?.city) && (
-                    <div className="ds-block">
-                      <div className="ds-block-label">Adres</div>
-                      <div className="ds-block-text">
-                        {[selectedDir?.addressLine1, selectedDir?.addressLine2, selectedDir?.city, selectedDir?.country].filter(Boolean).join(", ")}
-                      </div>
-                    </div>
-                  )}
-
-                  {selectedDir?.disciplines && selectedDir.disciplines.length > 0 && (
-                    <div className="ds-block">
-                      <div className="ds-block-label">Branşlar</div>
-                      <div className="discipline-chips">
-                        {selectedDir.disciplines.map(d => (
-                          <span key={d} className="discipline-chip">{d}</span>
+                      <div className="athlete-list">
+                        {athletes.filter(a => !disciplines.includes(a.discipline)).map((a, i) => (
+                          <div key={i} className="athlete-card">
+                            <div className="athlete-card-top">
+                              <span className="athlete-name">{a.name}</span>
+                              <span className="athlete-disc" style={{ color: DISCIPLINE_TR[a.discipline]?.color ?? "var(--muted)" }}>
+                                {DISCIPLINE_TR[a.discipline]?.label ?? a.discipline}
+                              </span>
+                            </div>
+                            <ul className="athlete-highlights">
+                              {a.highlights.map((h, j) => <li key={j}>{h}</li>)}
+                            </ul>
+                          </div>
                         ))}
                       </div>
                     </div>
                   )}
                 </>
-              )}
+              );
+            })()}
 
-              {/* ── SPOR ── */}
-              {dossierTab === "spor" && (
-                <>
-                  {selected.achievements?.length > 0 && (
-                    <div className="ds-block">
-                      <div className="ds-block-label">Başarılar</div>
-                      {selected.achievements.slice(0, 4).map((a, i) => (
-                        <div key={i} className="achievement-row">
-                          <span className="achievement-bullet">▸</span>
-                          <span className="achievement-text">{translateStrategicText(a)}</span>
+            {/* ── SPOR ── */}
+            {dossierTab === "spor" && (
+              <>
+                {/* Tesis & Altyapı */}
+                {((selected.facilityScore ?? 0) > 0 || selected.facilities) && (
+                  <div className="ds-block">
+                    <div className="ds-block-label">Tesis & Altyapı</div>
+                    {(selected.facilityScore ?? 0) > 0 && (
+                      <div className="stat-bar-row" style={{ marginBottom: 8 }}>
+                        <span className="stat-bar-label">Altyapı Skoru</span>
+                        <div className="stat-bar-track">
+                          <div className="stat-bar-fill" style={{ width: `${selected.facilityScore}%`, background: "#38BDF8" }} />
                         </div>
-                      ))}
+                        <span className="stat-bar-val">{selected.facilityScore}</span>
+                      </div>
+                    )}
+                    {selected.facilities && (
+                      <div className="ds-block-text" style={{ marginTop: 6 }}>{translateStrategicText(selected.facilities)}</div>
+                    )}
+                  </div>
+                )}
+
+                {/* Anahtar İstatistikler */}
+                <div className="ds-block">
+                  <div className="ds-block-label">Anahtar İstatistikler</div>
+                  <div className="stat-bar-row">
+                    <span className="stat-bar-label">FIG Gücü</span>
+                    <div className="stat-bar-track">
+                      <div className="stat-bar-fill" style={{ width: `${selected.figPowerIndex ?? 0}%`, background: "#A78BFA" }} />
+                    </div>
+                    <span className="stat-bar-val">{selected.figPowerIndex ?? 0}</span>
+                  </div>
+                  <div className="stat-bar-row">
+                    <span className="stat-bar-label">İlişki Gücü</span>
+                    <div className="stat-bar-track">
+                      <div className="stat-bar-fill" style={{ width: `${selected.relationshipStrength ?? 0}%`, background: "#10D9A0" }} />
+                    </div>
+                    <span className="stat-bar-val">{selected.relationshipStrength ?? 0}</span>
+                  </div>
+                  <div className="stat-bar-row">
+                    <span className="stat-bar-label">Etki Puanı</span>
+                    <div className="stat-bar-track">
+                      <div className="stat-bar-fill" style={{ width: `${selected.influence ?? 0}%`, background: "#F59E0B" }} />
+                    </div>
+                    <span className="stat-bar-val">{selected.influence ?? 0}</span>
+                  </div>
+                  {(selected.facilityScore ?? 0) > 0 && (
+                    <div className="stat-bar-row">
+                      <span className="stat-bar-label">Tesis</span>
+                      <div className="stat-bar-track">
+                        <div className="stat-bar-fill" style={{ width: `${selected.facilityScore}%`, background: "#38BDF8" }} />
+                      </div>
+                      <span className="stat-bar-val">{selected.facilityScore}</span>
                     </div>
                   )}
+                </div>
 
-                  {sportHighlights.length > 0 && (
-                    <div className="ds-block">
-                      <div className="ds-block-label">Spor Profili</div>
-                      {sportHighlights.map((h, i) => (
-                        <div key={i} className="achievement-row">
-                          <span className="achievement-bullet">▸</span>
-                          <span className="achievement-text">{h}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                {/* Başarılar */}
+                {selected.achievements?.length > 0 && (
+                  <div className="ds-block">
+                    <div className="ds-block-label">Başarılar</div>
+                    {selected.achievements.slice(0, 5).map((a, i) => (
+                      <div key={i} className="achievement-row">
+                        <span className="achievement-bullet">▸</span>
+                        <span className="achievement-text">{translateStrategicText(a)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
-                  {selected.figRoles?.length > 0 && (
-                    <div className="ds-block">
-                      <div className="ds-block-label">FIG Rolleri</div>
-                      {selected.figRoles.slice(0, 5).map((r, i) => (
-                        <div key={i} className="role-row">
-                          <div className="role-name">{r.name}</div>
-                          <div className="role-title">{r.role}</div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                {/* Milli Takım */}
+                {sportHighlights.length > 0 && (
+                  <div className="ds-block">
+                    <div className="ds-block-label">Milli Takım Profili</div>
+                    {sportHighlights.map((h, i) => (
+                      <div key={i} className="achievement-row">
+                        <span className="achievement-bullet">▸</span>
+                        <span className="achievement-text">{h}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
-                  {selected.hostedEvents?.length > 0 && (
-                    <div className="ds-block">
-                      <div className="ds-block-label">Ev Sahipliği</div>
-                      {selected.hostedEvents.slice(0, 3).map((e, i) => (
-                        <div key={i} className="achievement-row">
-                          <span className="achievement-bullet">▸</span>
-                          <span className="achievement-text">{translateStrategicText(e)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                {/* FIG Rolleri */}
+                {selected.figRoles?.length > 0 && (
+                  <div className="ds-block">
+                    <div className="ds-block-label">FIG Rolleri</div>
+                    {selected.figRoles.slice(0, 5).map((r, i) => (
+                      <div key={i} className="role-row">
+                        <div className="role-name">{r.name}</div>
+                        <div className="role-title">{r.role}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
-                  {sportHighlights.length === 0 && !selected.achievements?.length && !selected.figRoles?.length && (
-                    <div className="empty-state">Bu federasyon için spor verisi bulunamadı.</div>
-                  )}
-                </>
-              )}
-            </div>
+                {/* Ev Sahipliği */}
+                {selected.hostedEvents?.length > 0 && (
+                  <div className="ds-block">
+                    <div className="ds-block-label">Ev Sahipliği</div>
+                    {selected.hostedEvents.slice(0, 4).map((e, i) => (
+                      <div key={i} className="achievement-row">
+                        <span className="achievement-bullet">▸</span>
+                        <span className="achievement-text">{translateStrategicText(e)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {sportHighlights.length === 0 && !selected.achievements?.length && !selected.figRoles?.length && (selected.facilityScore ?? 0) === 0 && (
+                  <div className="empty-state">Bu federasyon için spor verisi bulunamadı.</div>
+                )}
+              </>
+            )}
+
+            {/* ── İSTİHBARAT ── */}
+            {dossierTab === "istihbarat" && (
+              <>
+                {/* Veri kalitesi */}
+                <div className="ds-block">
+                  <div className="ds-block-label">Veri Kalitesi</div>
+                  <span className={`badge badge-lg ${
+                    selected.researchStatus === "verified" ? "badge-green" :
+                    selected.researchStatus === "mixed" ? "badge-amber" : "badge-blue"
+                  }`}>
+                    {selected.researchStatus === "verified" ? "Doğrulanmış" :
+                     selected.researchStatus === "mixed" ? "Kısmen Doğrulanmış" : "Taslak Veri"}
+                  </span>
+                </div>
+
+                {/* Araştırma Görevleri */}
+                {(selected.researchTasks as unknown as Array<{ priority: string; task: string }> | undefined)?.length ? (
+                  <div className="ds-block">
+                    <div className="ds-block-label">Açık Araştırma Görevleri</div>
+                    {(selected.researchTasks as unknown as Array<{ priority: string; task: string }>).map((t, i) => (
+                      <div key={i} className="research-task-row">
+                        <span className={`task-priority task-${t.priority?.toLowerCase() ?? "medium"}`}>
+                          {t.priority === "high" ? "Yüksek" : t.priority === "low" ? "Düşük" : "Orta"}
+                        </span>
+                        <span className="task-label">{t.task}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+
+                {/* Temas Geçmişi */}
+                {(selected.contactLog as unknown as Array<{ date: string; note: string }> | undefined)?.length ? (
+                  <div className="ds-block">
+                    <div className="ds-block-label">Temas Geçmişi</div>
+                    {(selected.contactLog as unknown as Array<{ date: string; note: string }>).slice(0, 5).map((l, i) => (
+                      <div key={i} className="contact-log-row">
+                        <span className="log-date">{l.date}</span>
+                        <span className="log-note">{l.note}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+
+                {/* Diplomatik Müttefikler */}
+                {selected.diplomaticAllies?.length > 0 && (
+                  <div className="ds-block">
+                    <div className="ds-block-label">Diplomatik Müttefikler</div>
+                    <div className="ds-block-text">{selected.diplomaticAllies.slice(0, 8).join(" · ")}</div>
+                  </div>
+                )}
+
+                {/* Sürtüşme Noktaları */}
+                {selected.frictionPoints?.length > 0 && (
+                  <div className="ds-block">
+                    <div className="ds-block-label">Sürtüşme Noktaları</div>
+                    {selected.frictionPoints.slice(0, 3).map((f, i) => (
+                      <div key={i} className="achievement-row">
+                        <span style={{ color: "var(--red)", marginRight: 6 }}>!</span>
+                        <span className="achievement-text">{translateStrategicText(f)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Kaynaklar */}
+                {(selected.sources as unknown as Array<{ url: string; label?: string }> | undefined)?.length ? (
+                  <div className="ds-block">
+                    <div className="ds-block-label">Kaynaklar</div>
+                    {(selected.sources as unknown as Array<{ url: string; label?: string }>).slice(0, 5).map((s, i) => (
+                      <a key={i} href={s.url} target="_blank" rel="noreferrer" className="source-link">
+                        {s.label ?? s.url}
+                      </a>
+                    ))}
+                  </div>
+                ) : null}
+
+                {!selected.researchTasks?.length && !selected.diplomaticAllies?.length && !selected.contactLog?.length && (
+                  <div className="empty-state">Bu federasyon için istihbarat verisi bulunmuyor.</div>
+                )}
+              </>
+            )}
           </div>
-        </>
-      )}
+        </div>
+      </>,
+      document.body
+    )}
     </>
   );
 };

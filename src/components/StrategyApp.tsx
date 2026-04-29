@@ -182,8 +182,9 @@ const MAP_COLOR: Record<SupportStatus, string> = {
   resistant: "#F87171"
 };
 
-// Country code → ISO numeric
+// Country code → ISO numeric (IOC federation code → world-atlas topoJSON id)
 const CODE_TO_NUMERIC: Record<string, string> = {
+  // Büyük ülkeler
   TUR:"792",GER:"276",FRA:"250",USA:"840",CHN:"156",JPN:"392",BRA:"076",
   AUS:"036",EGY:"818",KEN:"404",RSA:"710",IND:"356",RUS:"643",UKR:"804",
   GBR:"826",ITA:"380",ESP:"724",ARG:"032",MEX:"484",CAN:"124",KOR:"410",
@@ -191,17 +192,34 @@ const CODE_TO_NUMERIC: Record<string, string> = {
   GRE:"300",POR:"620",BEL:"056",SWE:"752",NOR:"578",DEN:"208",FIN:"246",
   CZE:"203",SVK:"703",SLO:"705",CRO:"191",SRB:"688",BIH:"070",MKD:"807",
   MDA:"498",BLR:"112",KAZ:"398",UZB:"860",AZE:"031",GEO:"268",ARM:"051",
-  QAT:"634",UAE:"784",KUW:"414",BRN:"048",SAU:"682",OMA:"512",JOR:"400",
-  LIB:"422",IRQ:"368",IRN:"364",ISR:"376",PAK:"586",BAN:"050",SRI:"144",
-  NEP:"524",PHI:"608",INA:"360",MAS:"458",THA:"764",VIE:"704",SGP:"702",
-  MGL:"496",HKG:"344",TPE:"158",NZL:"554",FIJ:"242",PNG:"598",NGR:"566",
-  GHA:"288",CMR:"120",ETH:"231",TAN:"834",UGA:"800",ZIM:"716",ZAM:"894",
-  MOZ:"508",ANG:"024",SEN:"686",MLI:"466",BEN:"204",BUR:"854",CIV:"384",
-  GUI:"324",TOG:"768",NIG:"562",MAD:"450",ALG:"012",MAR:"504",TUN:"788",
-  LBA:"434",SUD:"729",COL:"170",VEN:"862",PER:"604",CHI:"152",ECU:"218",
-  BOL:"068",PAR:"600",URU:"858",GUA:"320",CRC:"188",PAN:"591",HON:"340",
-  ESA:"222",NCA:"558",DOM:"214",CUB:"192",PUR:"630",SKN:"659",JAM:"388",
-  TRI:"780",GUY:"328",SUR:"740",BAR:"052",
+  // Orta Doğu (IRI = Iran IOC kodu!)
+  QAT:"634",UAE:"784",KUW:"414",BRN:"048",KSA:"682",SAU:"682",OMA:"512",
+  JOR:"400",LIB:"422",IRQ:"368",IRI:"364",IRN:"364",ISR:"376",SYR:"760",YEM:"887",
+  // Asya
+  PAK:"586",BAN:"050",SRI:"144",NEP:"524",PHI:"608",INA:"360",MAS:"458",
+  THA:"764",VIE:"704",SGP:"702",MGL:"496",HKG:"344",TPE:"158",NZL:"554",
+  FIJ:"242",PNG:"598",KGZ:"417",TJK:"762",TKM:"795",LAO:"418",CAM:"116",
+  MYA:"104",PRK:"408",PLE:"275",MDV:"462",TLS:"626",
+  // Afrika
+  NGR:"566",GHA:"288",CMR:"120",ETH:"231",TAN:"834",UGA:"800",ZIM:"716",
+  ZAM:"894",MOZ:"508",ANG:"024",SEN:"686",MLI:"466",BEN:"204",BUR:"854",
+  CIV:"384",GUI:"324",TOG:"768",NIG:"562",MAD:"450",ALG:"012",MAR:"504",
+  TUN:"788",LBA:"434",SUD:"729",RWA:"646",NAM:"516",LBR:"430",SLE:"694",
+  GAB:"266",CGO:"178",COD:"180",MTN:"478",MAW:"454",MRI:"480",SEY:"690",
+  SOM:"706",LES:"426",SWZ:"748",STP:"678",CPV:"132",COM:"174",
+  // Avrupa (eksikler)
+  EST:"233",LAT:"428",LTU:"440",LUX:"442",IRL:"372",ISL:"352",LIE:"438",
+  SMR:"674",MON:"492",MLT:"470",MNE:"499",KOS:"383",CYP:"196",
+  // Americas
+  COL:"170",VEN:"862",PER:"604",CHI:"152",ECU:"218",BOL:"068",PAR:"600",
+  URU:"858",GUA:"320",CRC:"188",PAN:"591",HON:"340",ESA:"222",NCA:"558",
+  DOM:"214",CUB:"192",PUR:"630",SKN:"659",JAM:"388",TRI:"780",GUY:"328",
+  SUR:"740",BAR:"052",HAI:"332",ANT:"028",GRN:"308",VIN:"670",LCA:"662",
+  // Pasifik / diğer
+  SAM:"882",TGA:"776",VAN:"548",SOL:"090",PLW:"585",
+  // Küçük bölgeler / özel durumlar
+  ARU:"533",CAY:"136",ISV:"850",GUM:"316",ASA:"016",BER:"060",BAH:"044",
+  COK:"184",
 };
 
 // ── Editable text block ─────────────────────────────────────────────────

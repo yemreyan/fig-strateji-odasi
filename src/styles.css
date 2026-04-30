@@ -14,9 +14,9 @@
   --text:    #E8EEF7;
   --muted:   #6B7A8D;
   --green:   #10D9A0;
-  --blue:    #38BDF8;
+  --blue:    #3B82F6;
   --amber:   #F59E0B;
-  --red:     #F87171;
+  --red:     #EF4444;
   --nav-h:   64px;
   --hdr-h:   56px;
 }
@@ -212,9 +212,9 @@ a { color: inherit; text-decoration: none; }
 }
 .badge-lg { font-size: 12px; padding: 5px 10px; border-radius: 8px; }
 .badge-green { background: rgba(16,217,160,.15); color: var(--green); }
-.badge-blue  { background: rgba(56,189,248,.15); color: var(--blue); }
+.badge-blue  { background: rgba(59,130,246,.15); color: var(--blue); }
 .badge-amber { background: rgba(245,158,11,.15); color: var(--amber); }
-.badge-red   { background: rgba(248,113,113,.15); color: var(--red); }
+.badge-red   { background: rgba(239,68,68,.15); color: var(--red); }
 
 /* ── Map ────────────────────────────────────────────────── */
 .map-container {
@@ -878,6 +878,28 @@ a { color: inherit; text-decoration: none; }
   height: 100%;
   border-radius: 100px;
   background: var(--blue);
+}
+
+/* ── Ülke kodu etiketleri ────────────────────────────────── */
+.country-code-tag {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  color: var(--muted);
+  background: rgba(255,255,255,.07);
+  padding: 1px 5px;
+  border-radius: 4px;
+  margin-left: 4px;
+  vertical-align: middle;
+  font-family: "Inter", monospace;
+}
+.ds-title-code {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  color: var(--muted);
+  margin-left: 6px;
+  vertical-align: middle;
 }
 
 /* ── Desktop ─────────────────────────────────────────────── */

@@ -180,8 +180,8 @@ const STATUS_CSS: Record<SupportStatus, string> = {
 const MAP_COLOR: Record<SupportStatus, string> = {
   supporter: "#10D9A0",
   watch: "#F59E0B",
-  persuadable: "#38BDF8",
-  resistant: "#F87171"
+  persuadable: "#3B82F6",   // daha koyu, net mavi
+  resistant: "#EF4444"       // net kırmızı (pembe değil)
 };
 
 // ── Branş yapısı ──────────────────────────────────────────────────────
@@ -420,12 +420,24 @@ const AppMain = () => {
     update(ref(db, `fig-v3/overrides/${code}`), patch);
   };
 
-  // Merged country with overrides applied
+  // Status ağırlıkları (priorityScore yeniden hesaplamak için)
+  const STATUS_WEIGHT: Record<SupportStatus, number> = {
+    supporter: 18, watch: 50, persuadable: 84, resistant: 12
+  };
+
+  // Merged country with overrides applied + priority score recalculation
   const mergedSeed = useMemo(() => {
     return ranked.map(c => {
       const ov = overrides[c.countryCode];
-      if (!ov) return c;
-      return { ...c, status: ov.status ?? c.status };
+      if (!ov || !ov.status) return c;
+      const newStatus = ov.status;
+      // Durum değişince puanı yeniden hesapla
+      const scoreDelta = STATUS_WEIGHT[newStatus] - STATUS_WEIGHT[c.status];
+      return {
+        ...c,
+        status: newStatus,
+        priorityScore: Math.max(0, c.priorityScore + scoreDelta)
+      };
     });
   }, [ranked, overrides]);
 
@@ -606,7 +618,7 @@ const AppMain = () => {
                   <div className="priority-row-left">
                     <span className={`badge ${STATUS_CSS[c.status]}`}>{STATUS_TR[c.status]}</span>
                     <div>
-                      <div className="priority-name">{trName(c)}</div>
+                      <div className="priority-name">{trName(c)} <span className="country-code-tag">{c.countryCode}</span></div>
                       <div className="priority-sub">{continentMeta[c.continent]?.label} · {primaryNeedLabel(c.primaryNeed)}</div>
                     </div>
                   </div>
@@ -634,7 +646,7 @@ const AppMain = () => {
                     const isSelected = federationSeeds.find(c => CODE_TO_NUMERIC[c.countryCode] === numericId)?.countryCode === selectedCode;
                     return (
                       <Geography
-                        key={geo.rsmKey}
+                        key={`${geo.rsmKey}-${status ?? "none"}`}
                         geography={geo}
                         onClick={() => {
                           const seed = federationSeeds.find(c => CODE_TO_NUMERIC[c.countryCode] === numericId);
@@ -642,7 +654,7 @@ const AppMain = () => {
                         }}
                         style={{
                           default: { fill: status ? MAP_COLOR[status] : "#1C2A3A", stroke: "#0D1B2A", strokeWidth: 0.4, opacity: isSelected ? 1 : 0.85, outline: "none" },
-                          hover:   { fill: status ? MAP_COLOR[status] : "#243447", stroke: "#38BDF8", strokeWidth: 0.8, opacity: 1, outline: "none", cursor: status ? "pointer" : "default" },
+                          hover:   { fill: status ? MAP_COLOR[status] : "#243447", stroke: "#3B82F6", strokeWidth: 0.8, opacity: 1, outline: "none", cursor: status ? "pointer" : "default" },
                           pressed: { fill: status ? MAP_COLOR[status] : "#1C2A3A", outline: "none" }
                         }}
                       />
@@ -726,7 +738,7 @@ const AppMain = () => {
                 <div className="country-card-left">
                   <div className="country-card-code">{c.countryCode}</div>
                   <div style={{ minWidth: 0 }}>
-                    <div className="country-card-name">{trName(c)}</div>
+                    <div className="country-card-name">{trName(c)} <span className="country-code-tag">{c.countryCode}</span></div>
                     <div className="country-card-sub">{continentMeta[c.continent]?.label} · {c.president}</div>
                     {dirEntry?.disciplines && dirEntry.disciplines.length > 0 && (
                       <div className="card-disciplines">
@@ -856,7 +868,7 @@ const AppMain = () => {
           {/* Header */}
           <div className="ds-header">
             <div style={{ minWidth:0, flex:1 }}>
-              <div className="ds-title">{trName(selected)}</div>
+              <div className="ds-title">{trName(selected)} <span className="ds-title-code">{selected.countryCode}</span></div>
               <div className="ds-meta">{continentMeta[selected.continent]?.label} · {selected.president}</div>
             </div>
             <div style={{ display:"flex", alignItems:"center", gap:"10px", flexShrink:0 }}>

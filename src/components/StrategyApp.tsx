@@ -104,6 +104,41 @@ const COUNTRY_TR: Record<string, string> = {
 const trName = (c: FederationSeed) => COUNTRY_TR[c.countryCode] ?? c.countryName;
 const fmtScore = (n: number) => Math.round(n * 100) / 100;
 
+// ── IOC → ISO 3166-1 alpha-2 (bayrak emoji için) ─────────────────────
+const IOC_TO_ISO2: Record<string, string> = {
+  AFG:"AF",ALB:"AL",ALG:"DZ",AND:"AD",ANG:"AO",ANT:"AG",ARG:"AR",ARM:"AM",
+  ARU:"AW",ASA:"AS",AUS:"AU",AUT:"AT",AZE:"AZ",BAH:"BS",BAN:"BD",BAR:"BB",
+  BEL:"BE",BEN:"BJ",BER:"BM",BIH:"BA",BLR:"BY",BOL:"BO",BRA:"BR",BRN:"BH",
+  BUL:"BG",BUR:"BF",CAM:"KH",CAN:"CA",CAY:"KY",CGO:"CG",CHA:"TD",CHI:"CL",
+  CHN:"CN",CIV:"CI",CMR:"CM",COD:"CD",COK:"CK",COL:"CO",COM:"KM",CPV:"CV",
+  CRC:"CR",CRO:"HR",CUB:"CU",CYP:"CY",CZE:"CZ",DEN:"DK",DOM:"DO",ECU:"EC",
+  EGY:"EG",ESA:"SV",ESP:"ES",EST:"EE",ETH:"ET",FIJ:"FJ",FIN:"FI",FRA:"FR",
+  GAB:"GA",GBR:"GB",GEO:"GE",GER:"DE",GHA:"GH",GRE:"GR",GRN:"GD",GUA:"GT",
+  GUI:"GN",GUM:"GU",GUY:"GY",HAI:"HT",HKG:"HK",HON:"HN",HUN:"HU",INA:"ID",
+  IND:"IN",IRI:"IR",IRL:"IE",IRQ:"IQ",ISL:"IS",ISR:"IL",ISV:"VI",ITA:"IT",
+  JAM:"JM",JOR:"JO",JPN:"JP",KAZ:"KZ",KEN:"KE",KGZ:"KG",KOR:"KR",KOS:"XK",
+  KSA:"SA",KUW:"KW",LAO:"LA",LAT:"LV",LBA:"LY",LBR:"LR",LCA:"LC",LES:"LS",
+  LIB:"LB",LIE:"LI",LTU:"LT",LUX:"LU",MAD:"MG",MAR:"MA",MAS:"MY",MAW:"MW",
+  MDA:"MD",MDV:"MV",MEX:"MX",MGL:"MN",MKD:"MK",MLI:"ML",MLT:"MT",MNE:"ME",
+  MON:"MC",MOZ:"MZ",MRI:"MU",MTN:"MR",MYA:"MM",NAM:"NA",NCA:"NI",NED:"NL",
+  NEP:"NP",NGR:"NG",NIG:"NE",NOR:"NO",NZL:"NZ",OMA:"OM",PAK:"PK",PAN:"PA",
+  PAR:"PY",PER:"PE",PHI:"PH",PLE:"PS",PLW:"PW",PNG:"PG",POL:"PL",POR:"PT",
+  PRK:"KP",PUR:"PR",QAT:"QA",ROU:"RO",RSA:"ZA",RUS:"RU",RWA:"RW",SAM:"WS",
+  SAU:"SA",SEN:"SN",SEY:"SC",SGP:"SG",SKN:"KN",SLE:"SL",SLO:"SI",SMR:"SM",
+  SOL:"SB",SOM:"SO",SRB:"RS",SRI:"LK",STP:"ST",SUD:"SD",SUI:"CH",SUR:"SR",
+  SVK:"SK",SWE:"SE",SWZ:"SZ",SYR:"SY",TAN:"TZ",TGA:"TO",THA:"TH",TJK:"TJ",
+  TKM:"TM",TLS:"TL",TOG:"TG",TPE:"TW",TRI:"TT",TUN:"TN",TUR:"TR",UAE:"AE",
+  UGA:"UG",UKR:"UA",URU:"UY",USA:"US",UZB:"UZ",VAN:"VU",VEN:"VE",VIE:"VN",
+  VIN:"VC",YEM:"YE",ZAM:"ZM",ZIM:"ZW",
+};
+const flagEmoji = (code: string): string => {
+  const iso2 = IOC_TO_ISO2[code];
+  if (!iso2 || iso2.length !== 2) return "";
+  return iso2.toUpperCase().split("").map(
+    ch => String.fromCodePoint(0x1F1E6 + ch.charCodeAt(0) - 65)
+  ).join("");
+};
+
 // ── Icons ─────────────────────────────────────────────────────────────
 const IcGrid = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -618,7 +653,7 @@ const AppMain = () => {
                   <div className="priority-row-left">
                     <span className={`badge ${STATUS_CSS[c.status]}`}>{STATUS_TR[c.status]}</span>
                     <div>
-                      <div className="priority-name">{trName(c)} <span className="country-code-tag">{c.countryCode}</span></div>
+                      <div className="priority-name"><span className="flag-emoji">{flagEmoji(c.countryCode)}</span>{trName(c)} <span className="country-code-tag">{c.countryCode}</span></div>
                       <div className="priority-sub">{continentMeta[c.continent]?.label} · {primaryNeedLabel(c.primaryNeed)}</div>
                     </div>
                   </div>
@@ -686,7 +721,7 @@ const AppMain = () => {
             <div className="map-bar-overlay">
               <div className="map-bar">
                 <div style={{ minWidth: 0, flex: 1 }} onClick={() => { setDossierTab("genel"); setShowScoreInfo(false); setSheet("dossier"); }}>
-                  <div className="map-bar-name">{trName(selected)} <span className="map-bar-code">{selected.countryCode}</span></div>
+                  <div className="map-bar-name"><span className="flag-emoji">{flagEmoji(selected.countryCode)}</span>{trName(selected)} <span className="map-bar-code">{selected.countryCode}</span></div>
                   <div className="map-bar-sub">{STATUS_TR[selected.status]} · {continentMeta[selected.continent]?.label}</div>
                 </div>
                 <div style={{ display:"flex", gap:8, alignItems:"center", flexShrink:0 }}>
@@ -738,7 +773,7 @@ const AppMain = () => {
                 <div className="country-card-left">
                   <div className="country-card-code">{c.countryCode}</div>
                   <div style={{ minWidth: 0 }}>
-                    <div className="country-card-name">{trName(c)} <span className="country-code-tag">{c.countryCode}</span></div>
+                    <div className="country-card-name"><span className="flag-emoji">{flagEmoji(c.countryCode)}</span>{trName(c)} <span className="country-code-tag">{c.countryCode}</span></div>
                     <div className="country-card-sub">{continentMeta[c.continent]?.label} · {c.president}</div>
                     {dirEntry?.disciplines && dirEntry.disciplines.length > 0 && (
                       <div className="card-disciplines">
@@ -868,7 +903,7 @@ const AppMain = () => {
           {/* Header */}
           <div className="ds-header">
             <div style={{ minWidth:0, flex:1 }}>
-              <div className="ds-title">{trName(selected)} <span className="ds-title-code">{selected.countryCode}</span></div>
+              <div className="ds-title"><span className="flag-emoji flag-emoji-lg">{flagEmoji(selected.countryCode)}</span>{trName(selected)} <span className="ds-title-code">{selected.countryCode}</span></div>
               <div className="ds-meta">{continentMeta[selected.continent]?.label} · {selected.president}</div>
             </div>
             <div style={{ display:"flex", alignItems:"center", gap:"10px", flexShrink:0 }}>

@@ -18,7 +18,7 @@ import worldGeoData from "world-atlas/countries-110m.json";
 import federationDirectoryData from "../data/federationDirectory.json";
 import { federationSeeds } from "../data/federationSeeds";
 import { athletesByCode } from "../data/athleteData";
-import { presidentPhotoUrl } from "../data/presidentPhotos";
+import { presidentPhotoUrl, PHOTO_SOURCE } from "../data/presidentPhotos";
 import {
   buildSportHighlights,
   buildStrategicSummary,
@@ -27,7 +27,6 @@ import {
   translateStrategicText
 } from "../lib/presentation";
 import {
-  buildContinentSummaries,
   rankCountriesByUrgency,
   statusTone
 } from "../lib/strategy";
@@ -200,24 +199,63 @@ const IcPlus = () => (
   </svg>
 );
 
+// ── Photo Lightbox ─────────────────────────────────────────────────────
+const PhotoLightbox = ({ src, name, countryCode, onClose }: {
+  src: string; name: string; countryCode: string; onClose: () => void;
+}) => {
+  const source = PHOTO_SOURCE[countryCode];
+  return createPortal(
+    <>
+      <div className="lightbox-backdrop" onClick={onClose} />
+      <div className="lightbox-modal">
+        <img className="lightbox-img" src={src} alt={name} />
+        <div className="lightbox-info">
+          <div className="lightbox-name">{name}</div>
+          {source && (
+            <a className="lightbox-source" href={source.url} target="_blank" rel="noreferrer">
+              Kaynak: {source.site}
+            </a>
+          )}
+        </div>
+        <button className="lightbox-close" onClick={onClose}><IcX /></button>
+      </div>
+    </>,
+    document.body
+  );
+};
+
 // ── President Avatar ───────────────────────────────────────────────────
 const PresidentAvatar = ({
-  countryCode, presidentName, size = "sm"
+  countryCode, presidentName, size = "sm", clickable = true
 }: {
   countryCode: string;
   presidentName: string;
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "md" | "lg" | "xl";
+  clickable?: boolean;
 }) => {
   const [src, setSrc] = useState(() => presidentPhotoUrl(countryCode, presidentName));
-  const fallback = `https://ui-avatars.com/api/?name=${encodeURIComponent(presidentName || "?")}&background=1e293b&color=60a5fa&size=128&bold=true&font-size=0.42&format=svg`;
+  const [open, setOpen] = useState(false);
+  const fallback = `https://ui-avatars.com/api/?name=${encodeURIComponent(presidentName || "?")}&background=1e293b&color=60a5fa&size=256&bold=true&font-size=0.42&format=svg`;
 
   return (
-    <img
-      className={`president-avatar president-avatar-${size}`}
-      src={src}
-      alt={presidentName}
-      onError={() => { if (src !== fallback) setSrc(fallback); }}
-    />
+    <>
+      <img
+        className={`president-avatar president-avatar-${size}${clickable ? " president-avatar-clickable" : ""}`}
+        src={src}
+        alt={presidentName}
+        title={presidentName}
+        onError={() => { if (src !== fallback) setSrc(fallback); }}
+        onClick={clickable ? (e) => { e.stopPropagation(); setOpen(true); } : undefined}
+      />
+      {open && (
+        <PhotoLightbox
+          src={src}
+          name={presidentName}
+          countryCode={countryCode}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </>
   );
 };
 
@@ -392,12 +430,10 @@ const LoginScreen = ({ onLogin }: { onLogin: () => void }) => {
 // ── İç Uygulama (hooks burada — conditional return yok) ───────────────
 const AppMain = () => {
   const ranked = useMemo(() => rankCountriesByUrgency(federationSeeds), []);
-  const continentSummaries = useMemo(() => buildContinentSummaries(federationSeeds), []);
   const directoryByCode = useMemo(() =>
     Object.fromEntries(officialDirectory.map(r => [r.countryCode, r])) as Record<string, FederationDirectoryRecord>,
     []
   );
-  const seedByCode = useMemo(() => Object.fromEntries(ranked.map(c => [c.countryCode, c])), [ranked]);
 
   // Global state
   const [view, setView] = useState<AppView>("dashboard");
@@ -528,7 +564,7 @@ const AppMain = () => {
 
   const selected = mergedByCode[selectedCode] ?? mergedSeed[0];
   const selectedDir = directoryByCode[selectedCode];
-  const selectedOv = overrides[selectedCode] ?? {};
+  // const selectedOv = overrides[selectedCode] ?? {};
 
   const getAssessment = (c: FederationSeed) => overrides[c.countryCode]?.assessment ?? translateStrategicText(buildStrategicSummary(c));
   const getEntryChannel = (c: FederationSeed) => overrides[c.countryCode]?.entryChannel ?? translateStrategicText((c.entryChannels ?? [])[0] ?? "");
@@ -694,10 +730,10 @@ const AppMain = () => {
               <ZoomableGroup
                 zoom={mapPos.zoom}
                 center={mapPos.coordinates}
-                onMoveEnd={({ zoom, coordinates }) => setMapPos({ zoom, coordinates: coordinates as [number, number] })}
+                onMoveEnd={({ zoom, coordinates }: { zoom: number; coordinates: [number, number] }) => setMapPos({ zoom, coordinates })}
               >
                 <Geographies geography={worldGeoData}>
-                  {({ geographies }) => geographies.map(geo => {
+                  {({ geographies }: { geographies: { id: string; rsmKey: string; [k: string]: unknown }[] }) => geographies.map((geo) => {
                     const numericId = geo.id as string;
                     const status = statusByNumeric[numericId];
                     const isSelected = federationSeeds.find(c => CODE_TO_NUMERIC[c.countryCode] === numericId)?.countryCode === selectedCode;
@@ -925,7 +961,7 @@ const AppMain = () => {
 
           {/* Header */}
           <div className="ds-header">
-            <PresidentAvatar countryCode={selected.countryCode} presidentName={selected.president} size="lg" />
+            <PresidentAvatar countryCode={selected.countryCode} presidentName={selected.president} size="lg" clickable={true} />
             <div style={{ minWidth:0, flex:1 }}>
               <div className="ds-title"><span className="flag-emoji flag-emoji-lg">{flagEmoji(selected.countryCode)}</span>{trName(selected)} <span className="ds-title-code">{selected.countryCode}</span></div>
               <div className="ds-meta">{selected.president}</div>
@@ -1076,16 +1112,29 @@ const AppMain = () => {
             {/* ── İLETİŞİM ── */}
             {dossierTab === "iletisim" && (
               <>
-                <div className="ds-block">
-                  <div className="ds-block-label">Federasyon</div>
-                  <div className="ds-block-val" style={{ fontSize: 14 }}>{selectedDir?.federationName ?? selected.federationName}</div>
+                {/* Başkan Fotoğraf Kartı */}
+                <div className="president-card">
+                  <PresidentAvatar countryCode={selected.countryCode} presidentName={selected.president} size="xl" />
+                  <div className="president-card-info">
+                    <div className="president-card-role">Federasyon Başkanı</div>
+                    <div className="president-card-name">{selected.president}</div>
+                    {PHOTO_SOURCE[selected.countryCode] && (
+                      <a
+                        className="president-card-source"
+                        href={PHOTO_SOURCE[selected.countryCode].url}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={e => e.stopPropagation()}
+                      >
+                        🔗 {PHOTO_SOURCE[selected.countryCode].site}
+                      </a>
+                    )}
+                  </div>
                 </div>
 
                 <div className="ds-block">
-                  <div className="ds-block-label">Başkan</div>
-                  <div className="contact-row">
-                    <div className="contact-main">{selected.president}</div>
-                  </div>
+                  <div className="ds-block-label">Federasyon</div>
+                  <div className="ds-block-val" style={{ fontSize: 14 }}>{selectedDir?.federationName ?? selected.federationName}</div>
                 </div>
 
                 {selectedDir?.secretaryGeneral && (

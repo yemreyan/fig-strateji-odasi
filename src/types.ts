@@ -170,7 +170,7 @@ export interface FederationSeed {
   medalHighlights: string[];
   countryRanking: string;
   hostedEvents: string[];
-  officialEventFootprint: FigEventSummary;
+  officialEventFootprint?: FigEventSummary;
   sources: CountrySource[];
   researchTasks: ResearchTask[];
   contactLog: ContactLogEntry[];

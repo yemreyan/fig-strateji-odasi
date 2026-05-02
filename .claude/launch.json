@@ -1,0 +1,13 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "FIG Strateji Odası",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "5173"],
+      "cwd": "/Users/emre.yalciner/Desktop/Aktif Cimnastik Sistemleri/suat/dist",
+      "port": 5173,
+      "autoPort": false
+    }
+  ]
+}

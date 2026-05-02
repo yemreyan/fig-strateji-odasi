@@ -18,6 +18,7 @@ import worldGeoData from "world-atlas/countries-110m.json";
 import federationDirectoryData from "../data/federationDirectory.json";
 import { federationSeeds } from "../data/federationSeeds";
 import { athletesByCode } from "../data/athleteData";
+import { presidentPhotoUrl } from "../data/presidentPhotos";
 import {
   buildSportHighlights,
   buildStrategicSummary,
@@ -198,6 +199,27 @@ const IcPlus = () => (
     <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
   </svg>
 );
+
+// ── President Avatar ───────────────────────────────────────────────────
+const PresidentAvatar = ({
+  countryCode, presidentName, size = "sm"
+}: {
+  countryCode: string;
+  presidentName: string;
+  size?: "sm" | "md" | "lg";
+}) => {
+  const [src, setSrc] = useState(() => presidentPhotoUrl(countryCode, presidentName));
+  const fallback = `https://ui-avatars.com/api/?name=${encodeURIComponent(presidentName || "?")}&background=1e293b&color=60a5fa&size=128&bold=true&font-size=0.42&format=svg`;
+
+  return (
+    <img
+      className={`president-avatar president-avatar-${size}`}
+      src={src}
+      alt={presidentName}
+      onError={() => { if (src !== fallback) setSrc(fallback); }}
+    />
+  );
+};
 
 // ── Status helpers ─────────────────────────────────────────────────────
 const STATUS_TR: Record<SupportStatus, string> = {
@@ -720,9 +742,10 @@ const AppMain = () => {
           {mapPreview && selected && (
             <div className="map-bar-overlay">
               <div className="map-bar">
+                <PresidentAvatar countryCode={selected.countryCode} presidentName={selected.president} size="sm" />
                 <div style={{ minWidth: 0, flex: 1 }} onClick={() => { setDossierTab("genel"); setShowScoreInfo(false); setSheet("dossier"); }}>
                   <div className="map-bar-name"><span className="flag-emoji">{flagEmoji(selected.countryCode)}</span>{trName(selected)} <span className="map-bar-code">{selected.countryCode}</span></div>
-                  <div className="map-bar-sub">{STATUS_TR[selected.status]} · {continentMeta[selected.continent]?.label}</div>
+                  <div className="map-bar-sub">{selected.president} · {continentMeta[selected.continent]?.label}</div>
                 </div>
                 <div style={{ display:"flex", gap:8, alignItems:"center", flexShrink:0 }}>
                   <button className="map-bar-btn" type="button" onClick={() => { setDossierTab("genel"); setShowScoreInfo(false); setSheet("dossier"); }}>Dosya Aç</button>
@@ -771,10 +794,10 @@ const AppMain = () => {
               return (
               <div key={c.countryCode} className="country-card" onClick={() => openDossier(c.countryCode)}>
                 <div className="country-card-left">
-                  <div className="country-card-code">{c.countryCode}</div>
+                  <PresidentAvatar countryCode={c.countryCode} presidentName={c.president} size="md" />
                   <div style={{ minWidth: 0 }}>
                     <div className="country-card-name"><span className="flag-emoji">{flagEmoji(c.countryCode)}</span>{trName(c)} <span className="country-code-tag">{c.countryCode}</span></div>
-                    <div className="country-card-sub">{continentMeta[c.continent]?.label} · {c.president}</div>
+                    <div className="country-card-sub">{c.president}</div>
                     {dirEntry?.disciplines && dirEntry.disciplines.length > 0 && (
                       <div className="card-disciplines">
                         {dirEntry.disciplines.slice(0, 5).map(d => (
@@ -902,9 +925,11 @@ const AppMain = () => {
 
           {/* Header */}
           <div className="ds-header">
+            <PresidentAvatar countryCode={selected.countryCode} presidentName={selected.president} size="lg" />
             <div style={{ minWidth:0, flex:1 }}>
               <div className="ds-title"><span className="flag-emoji flag-emoji-lg">{flagEmoji(selected.countryCode)}</span>{trName(selected)} <span className="ds-title-code">{selected.countryCode}</span></div>
-              <div className="ds-meta">{continentMeta[selected.continent]?.label} · {selected.president}</div>
+              <div className="ds-meta">{selected.president}</div>
+              <div className="ds-meta" style={{ opacity: 0.6, fontSize: 11 }}>{continentMeta[selected.continent]?.label} · {selected.federationName}</div>
             </div>
             <div style={{ display:"flex", alignItems:"center", gap:"10px", flexShrink:0 }}>
               <button type="button" className="sheet-x" onClick={() => setSheet(null)}><IcX /></button>

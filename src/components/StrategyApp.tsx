@@ -24,6 +24,14 @@ import { presidentPhotoUrl, PHOTO_SOURCE } from "../data/presidentPhotos";
 import {
   buildSportHighlights,
   buildStrategicSummary,
+  buildCountryIdentity,
+  buildOperationalChips,
+  buildStrategicMoves,
+  buildPowerNarrative,
+  buildJudgeNarrative,
+  buildAthleteNarrative,
+  buildProofBullets,
+  buildMessageBullets,
   continentMeta,
   primaryNeedLabel,
   translateStrategicText
@@ -1478,6 +1486,13 @@ const AppMain = () => {
             </div>
           </div>
 
+          {/* Operasyonel kimlik chip'leri */}
+          <div className="op-chips-row">
+            {buildOperationalChips(selected).map((chip, i) => (
+              <span key={i} className="op-chip">{chip}</span>
+            ))}
+          </div>
+
           {/* Skor açıklaması */}
           {showScoreInfo && (
             <div className="score-info-box">
@@ -1584,6 +1599,43 @@ const AppMain = () => {
                   </div>
                 ))}
 
+                {/* Karar Mimarisi */}
+                {(selected.decisionArchitecture ?? []).length > 0 && (
+                  <div className="ds-block">
+                    <div className="ds-block-label">🏛️ {lang === "tr" ? "Karar Mimarisi" : "Decision Architecture"}</div>
+                    {selected.decisionArchitecture.map((d, i) => (
+                      <div key={i} className="msg-item">
+                        <span className="msg-bullet">▸</span>
+                        <span className="msg-text">{translateStrategicText(d)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Strateji Adımları */}
+                <div className="ds-block">
+                  <div className="ds-block-label">⚡ {lang === "tr" ? "Taktik Adımlar" : "Strategic Moves"}</div>
+                  {buildStrategicMoves(selected).map((move, i) => (
+                    <div key={i} className="strat-move-row">
+                      <span className="strat-move-num">{i + 1}</span>
+                      <span className="strat-move-text">{move}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Strateji Yolu */}
+                {(selected.strategyPath ?? []).length > 0 && (
+                  <div className="ds-block">
+                    <div className="ds-block-label">🗺️ {lang === "tr" ? "Strateji Yolu" : "Strategy Path"}</div>
+                    {selected.strategyPath.map((s, i) => (
+                      <div key={i} className="msg-item">
+                        <span className="msg-bullet">→</span>
+                        <span className="msg-text">{translateStrategicText(s)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 {/* Yol haritası */}
                 <div className="ds-block" style={{ marginTop: 16 }}>
                   <div className="ds-block-label">{lang === "tr" ? "6 Aylık Eylem Planı" : "6-Month Action Plan"}</div>
@@ -1686,6 +1738,41 @@ const AppMain = () => {
                     ))}
                   </div>
                 )}
+
+                {/* Kaçınılacak Konular */}
+                {(selected.redLines ?? []).length > 0 && (
+                  <div className="ds-block">
+                    <div className="ds-block-label">🚫 {lang === "tr" ? "Kaçınılacak Konular" : "Red Lines"}</div>
+                    {selected.redLines.map((r, i) => (
+                      <div key={i} className="msg-item">
+                        <span className="msg-bullet" style={{ color: "var(--red)" }}>✕</span>
+                        <span className="msg-text" style={{ color: "var(--red)" }}>{translateStrategicText(r)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Mesaj Çerçevesi */}
+                <div className="ds-block">
+                  <div className="ds-block-label">🗣️ {lang === "tr" ? "Mesaj Çerçevesi" : "Message Framework"}</div>
+                  {buildMessageBullets(selected).map((b, i) => (
+                    <div key={i} className="msg-item">
+                      <span className="msg-bullet">◈</span>
+                      <span className="msg-text">{b}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Kanıt Maddeleri */}
+                <div className="ds-block">
+                  <div className="ds-block-label">✅ {lang === "tr" ? "Kanıt Noktaları" : "Proof Points"}</div>
+                  {buildProofBullets(selected).map((b, i) => (
+                    <div key={i} className="msg-item">
+                      <span className="msg-bullet">▸</span>
+                      <span className="msg-text">{b}</span>
+                    </div>
+                  ))}
+                </div>
 
                 {/* Boş durum */}
                 {!(selected.messaging?.length) && !(selected.persuasionPayload?.length) && !(selected.congressScenario?.length) && (
@@ -2051,6 +2138,41 @@ const AppMain = () => {
                   </div>
                 )}
 
+                {/* Siyasi Güç Profili */}
+                {selected.politicalPower && (
+                  <div className="ds-block">
+                    <div className="ds-block-label">⚖️ {lang === "tr" ? "Siyasi Güç Profili" : "Political Power"}</div>
+                    <div className="ds-block-text">{translateStrategicText(selected.politicalPower)}</div>
+                    <div className="ds-block-text" style={{ marginTop: 6, opacity: 0.75 }}>{buildPowerNarrative(selected)}</div>
+                  </div>
+                )}
+
+                {/* Teknik & Hakemlik */}
+                {(selected.technicalCommitteeStatus || selected.judgesInfluence) && (
+                  <div className="ds-block">
+                    <div className="ds-block-label">🎯 {lang === "tr" ? "Teknik & Hakemlik" : "Technical & Judging"}</div>
+                    {selected.technicalCommitteeStatus && (
+                      <div className="msg-item">
+                        <span className="msg-bullet">▸</span>
+                        <span className="msg-text">{translateStrategicText(selected.technicalCommitteeStatus)}</span>
+                      </div>
+                    )}
+                    {selected.judgesInfluence && (
+                      <div className="msg-item">
+                        <span className="msg-bullet">▸</span>
+                        <span className="msg-text">{translateStrategicText(selected.judgesInfluence)}</span>
+                      </div>
+                    )}
+                    <div className="ds-block-text" style={{ marginTop: 6, opacity: 0.75 }}>{buildJudgeNarrative(selected)}</div>
+                  </div>
+                )}
+
+                {/* Sporcu Kapasitesi */}
+                <div className="ds-block">
+                  <div className="ds-block-label">🏃 {lang === "tr" ? "Sporcu Kapasitesi" : "Athlete Capacity"}</div>
+                  <div className="ds-block-text">{buildAthleteNarrative(selected)}</div>
+                </div>
+
                 {sportHighlights.length === 0 && !selected.achievements?.length && !selected.figRoles?.length && (selected.facilityScore ?? 0) === 0 && (
                   <div className="empty-state">Bu federasyon için spor verisi bulunamadı.</div>
                 )}
@@ -2149,6 +2271,24 @@ const AppMain = () => {
                     </div>
                   )}
                 </div>
+
+                {/* İlişki Ağı */}
+                {(selected.relationshipNetwork ?? []).length > 0 && (
+                  <div className="ds-block">
+                    <div className="ds-block-label">🕸️ {lang === "tr" ? "İlişki Ağı" : "Relationship Network"}</div>
+                    {selected.relationshipNetwork.map((rel, i) => (
+                      <div key={i} className="rel-network-row">
+                        <span className={`rel-kind rel-kind-${rel.kind}`}>
+                          {rel.kind === "ally" ? (lang === "tr" ? "Müttefik" : "Ally") :
+                           rel.kind === "swing" ? (lang === "tr" ? "Sallanır" : "Swing") :
+                           (lang === "tr" ? "Rakip" : "Rival")}
+                        </span>
+                        <span className="rel-label">{rel.label}</span>
+                        {rel.note && <span className="rel-note">{translateStrategicText(rel.note)}</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 {/* Diplomatik Müttefikler */}
                 {selected.diplomaticAllies?.length > 0 && (

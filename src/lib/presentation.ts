@@ -22,31 +22,31 @@ export const continentMeta: Record<
 > = {
   EG: {
     label: "Avrupa",
-    accent: "#5da8ff",
+    accent: "#0085C7",
     flag: "🌍",
     description: "Teknik güven, yönetişim ciddiyeti ve organizasyon kalitesi belirleyici."
   },
   AGU: {
     label: "Asya",
-    accent: "#2eb67d",
+    accent: "#F4C300",
     flag: "🌏",
     description: "İstikrar dili, kurumsal saygı ve teknoloji güveni öne çıkıyor."
   },
   UAG: {
     label: "Afrika",
-    accent: "#ff8a57",
+    accent: "#A8A8A8",
     flag: "🌍",
     description: "Gelişim fonu, ekipman erişimi ve eğitim teslimatı kritik."
   },
   PAGU: {
     label: "Amerika",
-    accent: "#f1c95b",
+    accent: "#DF0024",
     flag: "🌎",
     description: "Sporcu görünürlüğü, yayın değeri ve şeffaf yönetim öne çıkıyor."
   },
   OGU: {
     label: "Okyanusya",
-    accent: "#9e8dff",
+    accent: "#009F6B",
     flag: "🌏",
     description: "Uzaklık maliyeti, uzaktan eğitim ve küçük federasyon adaleti önemli."
   }

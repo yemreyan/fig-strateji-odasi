@@ -48,6 +48,47 @@ export const PRESIDENT_PHOTOS: Record<string, string> = {
 
   // Kazakistan — Aliya Yussupova (Wikipedia)
   KAZ: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/84/Alia_Yusupova.JPG/250px-Alia_Yusupova.JPG",
+
+  // ── Federasyon resmi sitelerinden eklenenler ──────────────────────────
+
+  // Finlandiya — Mira Keränen (voimistelu.fi)
+  FIN: "https://evermade-voimistelu-website.s3.eu-north-1.amazonaws.com/wp-content/uploads/2024/02/20135058/MiraKeranen.jpg",
+
+  // Sırbistan — Saša Veličković (gssrb.rs)
+  SRB: "https://www.gssrb.rs/wp-content/uploads/2020/12/Sasa-VELICKOVIC.jpg",
+
+  // Slovakya — (sgf.sk)
+  SVK: "https://www.sgf.sk/userfiles/image/IMG_1915.jpeg",
+
+  // Norveç — (gymogturn.no)
+  NOR: "https://gymogturn.no/wp-content/uploads/2019/12/Bilde-26.04.2026-12-41-25-1-300x298.jpg",
+
+  // Arnavutluk — (gjimnastika.al)
+  ALB: "https://gjimnastika.al/wp-content/uploads/2024/06/image.png",
+
+  // İsviçre — Fabio Corti (stv-fsg.ch)
+  SUI: "https://www.stv-fsg.ch/fileadmin/_processed_/0/b/csm_fabio-corti_4b145b2e5c.webp",
+
+  // Avusturya — (turnsport-austria.at)
+  AUT: "https://www.turnsport-austria.at/de/getpic/NBM0l.yDcuCFA/500/",
+
+  // İsveç — Suzanne Lundvall (Wikipedia)
+  SWE: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/91/Suzanne_Lundvall_2006_%28cropped%29.jpg/250px-Suzanne_Lundvall_2006_%28cropped%29.jpg",
+
+  // Katar — (qatargym.com)
+  QAT: "https://qatargym.com/en/images/hitmi_.jpeg",
+
+  // Yeni Zelanda — Quinton Hall (gymnasticsnz.com)
+  NZL: "https://www.gymnasticsnz.com/wp-content/uploads/2024/07/Quinton-Hall-GNZ-Board-4-3-for-web.jpg",
+
+  // Kanada — Michael Downey (gymcan.org)
+  CAN: "https://gymcan.org/wp-content/uploads/2026/02/MichaelDowneyHeadshot-1024x1024.jpg",
+
+  // Gürcistan — Konstantin Lashkhi (uggf.ge)
+  GEO: "http://www.uggf.ge/files/images/federacia/1kliokj.jpg",
+
+  // Hong Kong — Kenneth FOK (Wikipedia)
+  HKG: "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4a/Kenneth-Fok-Kai-kong.jpg/250px-Kenneth-Fok-Kai-kong.jpg",
 };
 
 /**
@@ -77,4 +118,17 @@ export const PHOTO_SOURCE: Record<string, { site: string; url: string }> = {
   HUN: { site: "Wikipedia", url: "https://en.wikipedia.org/wiki/Zolt%C3%A1n_Magyar" },
   ESP: { site: "Wikipedia", url: "https://en.wikipedia.org/wiki/Jes%C3%BAs_Carballo" },
   KAZ: { site: "Wikipedia", url: "https://en.wikipedia.org/wiki/Aliya_Yussupova" },
+  FIN: { site: "voimistelu.fi", url: "https://www.voimistelu.fi/en/About-us/Administration/Board-of-directors" },
+  SRB: { site: "gssrb.rs", url: "https://www.gssrb.rs/o-savezu/rukovodstvo/" },
+  SVK: { site: "sgf.sk", url: "https://www.sgf.sk/prezidentka" },
+  NOR: { site: "gymogturn.no", url: "https://gymogturn.no/om-ngi/styret/" },
+  ALB: { site: "gjimnastika.al", url: "https://gjimnastika.al/keshilli-drejtues/" },
+  SUI: { site: "stv-fsg.ch", url: "https://www.stv-fsg.ch/de/verband/vorstand.html" },
+  AUT: { site: "turnsport-austria.at", url: "https://www.turnsport-austria.at/de/verband/praesidium.html" },
+  SWE: { site: "Wikipedia", url: "https://en.wikipedia.org/wiki/Suzanne_Lundvall" },
+  QAT: { site: "qatargym.com", url: "https://qatargym.com/en/about-us" },
+  NZL: { site: "gymnasticsnz.com", url: "https://www.gymnasticsnz.com/about-us/governance/board/" },
+  CAN: { site: "gymcan.org", url: "https://gymcan.org/about/board-of-directors/" },
+  GEO: { site: "uggf.ge", url: "https://uggf.ge/en/president" },
+  HKG: { site: "Wikipedia", url: "https://en.wikipedia.org/wiki/Kenneth_Fok" },
 };

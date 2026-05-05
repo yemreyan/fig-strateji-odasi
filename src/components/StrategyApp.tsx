@@ -8,6 +8,8 @@ import React, {
 } from "react";
 import { createPortal } from "react-dom";
 import { db, onValue, ref, remove, set, update } from "../lib/firebase";
+import { t } from "../lib/i18n";
+import { useLang } from "../lib/LanguageContext";
 import {
   ComposableMap,
   Geographies,
@@ -30,28 +32,35 @@ import {
   rankCountriesByUrgency,
   statusTone
 } from "../lib/strategy";
+import { buildCountryRoadmap } from "../lib/roadmap";
 import type {
   ContinentCode,
+  ContactLogEntry,
   FederationDirectoryRecord,
   FederationSeed,
+  FigPromise,
+  PromiseCategory,
+  PromiseStatus,
   SupportStatus
 } from "../types";
 
 // ── Types ─────────────────────────────────────────────────────────────
-type AppView = "dashboard" | "map" | "countries" | "notes";
+type AppView = "dashboard" | "map" | "countries" | "vaatler" | "notes";
 type Sheet = "dossier" | null;
 type FilterValue<T extends string> = T | "all";
-type DossierTab = "genel" | "iletisim" | "branşlar" | "spor" | "istihbarat";
+type DossierTab = "genel" | "iletisim" | "branşlar" | "spor" | "istihbarat" | "mesaj";
+type PromiseTab = "active" | "archive" | "all";
 
 // Notes
 type Note = { id: string; countryCode: string; countryName: string; title: string; body: string; date: string; completed?: boolean };
 
-// Overrides — status + editable texts
+// Overrides — status + editable texts + president contact
 type CountryOverride = {
   status?: SupportStatus;
   assessment?: string;
   entryChannel?: string;
   redLine?: string;
+  presidentPhone?: string;
 };
 
 const officialDirectory = federationDirectoryData as FederationDirectoryRecord[];
@@ -198,6 +207,27 @@ const IcPlus = () => (
     <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
   </svg>
 );
+const IcHandshake = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9 11l3-3 3 3"/>
+    <path d="M12 8v8"/>
+    <path d="M5 17H2a1 1 0 01-1-1V5a1 1 0 011-1h3"/>
+    <path d="M19 17h3a1 1 0 001-1V5a1 1 0 00-1-1h-3"/>
+    <path d="M5 7h14"/>
+    <path d="M5 17h14"/>
+  </svg>
+);
+const IcCamera = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/>
+    <circle cx="12" cy="13" r="4"/>
+  </svg>
+);
+const IcWhatsApp = () => (
+  <svg viewBox="0 0 24 24" fill="currentColor" style={{ display:"inline-block" }}>
+    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+  </svg>
+);
 
 // ── Photo Lightbox ─────────────────────────────────────────────────────
 const PhotoLightbox = ({ src, name, countryCode, onClose }: {
@@ -226,16 +256,23 @@ const PhotoLightbox = ({ src, name, countryCode, onClose }: {
 
 // ── President Avatar ───────────────────────────────────────────────────
 const PresidentAvatar = ({
-  countryCode, presidentName, size = "sm", clickable = true
+  countryCode, presidentName, size = "sm", clickable = true, photoOverride
 }: {
   countryCode: string;
   presidentName: string;
   size?: "sm" | "md" | "lg" | "xl";
   clickable?: boolean;
+  photoOverride?: string;
 }) => {
-  const [src, setSrc] = useState(() => presidentPhotoUrl(countryCode, presidentName));
-  const [open, setOpen] = useState(false);
   const fallback = `https://ui-avatars.com/api/?name=${encodeURIComponent(presidentName || "?")}&background=1e293b&color=60a5fa&size=256&bold=true&font-size=0.42&format=svg`;
+  const [src, setSrc] = useState(() => photoOverride ?? presidentPhotoUrl(countryCode, presidentName));
+  const [open, setOpen] = useState(false);
+
+  // Firebase'den fotoğraf override güncellenince src'yi yenile
+  useEffect(() => {
+    if (photoOverride) setSrc(photoOverride);
+    else setSrc(presidentPhotoUrl(countryCode, presidentName));
+  }, [photoOverride, countryCode, presidentName]);
 
   return (
     <>
@@ -260,12 +297,6 @@ const PresidentAvatar = ({
 };
 
 // ── Status helpers ─────────────────────────────────────────────────────
-const STATUS_TR: Record<SupportStatus, string> = {
-  supporter: "Destekçi",
-  watch: "İzle",
-  persuadable: "İkna Edilebilir",
-  resistant: "Dirençli"
-};
 const STATUS_CSS: Record<SupportStatus, string> = {
   supporter: "badge-green",
   watch: "badge-amber",
@@ -429,6 +460,7 @@ const LoginScreen = ({ onLogin }: { onLogin: () => void }) => {
 
 // ── İç Uygulama (hooks burada — conditional return yok) ───────────────
 const AppMain = () => {
+  const { lang, setLang } = useLang();
   const ranked = useMemo(() => rankCountriesByUrgency(federationSeeds), []);
   const directoryByCode = useMemo(() =>
     Object.fromEntries(officialDirectory.map(r => [r.countryCode, r])) as Record<string, FederationDirectoryRecord>,
@@ -440,6 +472,7 @@ const AppMain = () => {
   const [sheet, setSheet] = useState<Sheet>(null);
   const [selectedCode, setSelectedCode] = useState(ranked[0].countryCode);
   const [dossierTab, setDossierTab] = useState<DossierTab>("genel");
+  const [promiseTab, setPromiseTab] = useState<PromiseTab>("active");
 
   // Filters
   const [statusFilter, setStatusFilter] = useState<FilterValue<SupportStatus>>("all");
@@ -465,6 +498,45 @@ const AppMain = () => {
   // Overrides — synced from Firebase
   const [overrides, setOverrides] = useState<Record<string, CountryOverride>>({});
 
+  // Photo overrides — synced from Firebase
+  const [photoOverrides, setPhotoOverrides] = useState<Record<string, string>>({});
+
+  // Promises — synced from Firebase
+  const [promises, setPromises] = useState<FigPromise[]>([]);
+
+  // Photo edit UI
+  const [photoEditCode, setPhotoEditCode] = useState<string | null>(null);
+  const [photoEditUrl, setPhotoEditUrl] = useState("");
+
+  // Promise form UI
+  const [showPromiseForm, setShowPromiseForm] = useState(false);
+  const [editingPromise, setEditingPromise] = useState<FigPromise | null>(null);
+  const [promiseText, setPromiseText] = useState("");
+  const [promiseCountries, setPromiseCountries] = useState<string[]>([]);
+  const [promiseCategory, setPromiseCategory] = useState<PromiseCategory>("diger");
+  const [promiseDateGiven, setPromiseDateGiven] = useState("");
+  const [promiseDueDate, setPromiseDueDate] = useState("");
+  const [promiseStatus, setPromiseStatus] = useState<PromiseStatus>("verildi");
+  const [promiseNotes, setPromiseNotes] = useState("");
+
+  // President phone edit UI
+  const [phoneEditCode, setPhoneEditCode] = useState<string | null>(null);
+  const [phoneEditVal, setPhoneEditVal] = useState("");
+
+  // Vote simulator
+  const [conversionRate, setConversionRate] = useState(50);
+
+  // Contact logs — synced from Firebase
+  const [contactLogs, setContactLogs] = useState<Record<string, ContactLogEntry[]>>({});
+
+  // Contact log form UI
+  const [showContactForm, setShowContactForm] = useState(false);
+  const [contactDate, setContactDate] = useState(new Date().toISOString().slice(0, 10));
+  const [contactChannel, setContactChannel] = useState<ContactLogEntry["channel"]>("call");
+  const [contactActor, setContactActor] = useState("Suat Çelen");
+  const [contactSummary, setContactSummary] = useState("");
+  const [contactNextStep, setContactNextStep] = useState("");
+
   // Firebase listeners
   useEffect(() => {
     const unsub = onValue(ref(db, "fig-v3/notes"), snap => {
@@ -480,6 +552,37 @@ const AppMain = () => {
     const unsub = onValue(ref(db, "fig-v3/overrides"), snap => {
       const val = snap.val() as Record<string, CountryOverride> | null;
       setOverrides(val ?? {});
+    });
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    const unsub = onValue(ref(db, "fig-v3/photo-overrides"), snap => {
+      const val = snap.val() as Record<string, string> | null;
+      setPhotoOverrides(val ?? {});
+    });
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    const unsub = onValue(ref(db, "fig-v3/promises"), snap => {
+      const val = snap.val() as Record<string, FigPromise> | null;
+      if (!val) { setPromises([]); return; }
+      const arr = Object.values(val).sort((a, b) => (b.dateGiven ?? "").localeCompare(a.dateGiven ?? ""));
+      setPromises(arr);
+    });
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    const unsub = onValue(ref(db, "fig-v3/contactLogs"), snap => {
+      const val = snap.val() as Record<string, Record<string, ContactLogEntry>> | null;
+      if (!val) { setContactLogs({}); return; }
+      const result: Record<string, ContactLogEntry[]> = {};
+      for (const [code, entries] of Object.entries(val)) {
+        result[code] = Object.values(entries).sort((a, b) => b.date.localeCompare(a.date));
+      }
+      setContactLogs(result);
     });
     return unsub;
   }, []);
@@ -511,6 +614,82 @@ const AppMain = () => {
   // Helper to update override for a country (writes to Firebase)
   const setOverride = (code: string, patch: Partial<CountryOverride>) => {
     update(ref(db, `fig-v3/overrides/${code}`), patch);
+  };
+
+  // Photo override
+  const savePhotoOverride = (code: string, url: string) => {
+    if (url.trim()) set(ref(db, `fig-v3/photo-overrides/${code}`), url.trim());
+    else remove(ref(db, `fig-v3/photo-overrides/${code}`));
+    setPhotoEditCode(null);
+    setPhotoEditUrl("");
+  };
+
+  // Promise CRUD
+  const savePromise = (e: FormEvent) => {
+    e.preventDefault();
+    if (!promiseText.trim()) return;
+    const id = editingPromise?.id ?? `p-${Date.now()}`;
+    const p: FigPromise = {
+      id,
+      text: promiseText.trim(),
+      countryCodes: promiseCountries,
+      category: promiseCategory,
+      dateGiven: promiseDateGiven || undefined,
+      dueDate: promiseDueDate || undefined,
+      status: promiseStatus,
+      notes: promiseNotes.trim() || undefined,
+    };
+    set(ref(db, `fig-v3/promises/${id}`), p);
+    resetPromiseForm();
+  };
+
+  const deletePromise = (id: string) => remove(ref(db, `fig-v3/promises/${id}`));
+
+  // Contact log CRUD
+  const saveContactLog = (e: FormEvent) => {
+    e.preventDefault();
+    if (!contactSummary.trim()) return;
+    const entry: ContactLogEntry = {
+      date: contactDate,
+      actor: contactActor.trim() || "Suat Çelen",
+      channel: contactChannel,
+      summary: contactSummary.trim(),
+      nextStep: contactNextStep.trim(),
+    };
+    const key = `${Date.now()}`;
+    set(ref(db, `fig-v3/contactLogs/${selectedCode}/${key}`), entry);
+    setShowContactForm(false);
+    setContactSummary("");
+    setContactNextStep("");
+  };
+  const deleteContactLog = (code: string, key: string) =>
+    remove(ref(db, `fig-v3/contactLogs/${code}/${key}`));
+
+  const updatePromiseStatus = (id: string, status: PromiseStatus) =>
+    update(ref(db, `fig-v3/promises/${id}`), { status });
+
+  const resetPromiseForm = () => {
+    setShowPromiseForm(false);
+    setEditingPromise(null);
+    setPromiseText("");
+    setPromiseCountries([]);
+    setPromiseCategory("diger");
+    setPromiseDateGiven("");
+    setPromiseDueDate("");
+    setPromiseStatus("verildi");
+    setPromiseNotes("");
+  };
+
+  const startEditPromise = (p: FigPromise) => {
+    setEditingPromise(p);
+    setPromiseText(p.text);
+    setPromiseCountries(p.countryCodes);
+    setPromiseCategory(p.category);
+    setPromiseDateGiven(p.dateGiven ?? "");
+    setPromiseDueDate(p.dueDate ?? "");
+    setPromiseStatus(p.status);
+    setPromiseNotes(p.notes ?? "");
+    setShowPromiseForm(true);
   };
 
   // Status ağırlıkları (priorityScore yeniden hesaplamak için)
@@ -600,16 +779,51 @@ const AppMain = () => {
 
   const majority = Math.ceil(totals.total / 2) + 1;
 
-  // Continent summaries from merged data
+  // Continent summaries from merged data (all 4 statuses)
   const continentStats = useMemo(() => {
-    const map: Record<string, { total: number; supporter: number }> = {};
+    const map: Record<string, { total: number; supporter: number; watch: number; persuadable: number; resistant: number }> = {};
     for (const c of mergedSeed) {
-      if (!map[c.continent]) map[c.continent] = { total: 0, supporter: 0 };
+      if (!map[c.continent]) map[c.continent] = { total: 0, supporter: 0, watch: 0, persuadable: 0, resistant: 0 };
       map[c.continent].total++;
-      if (c.status === "supporter") map[c.continent].supporter++;
+      map[c.continent][c.status]++;
     }
     return map;
   }, [mergedSeed]);
+
+  // Vote projections
+  const projected = useMemo(() => {
+    const fromPersuadable = Math.round(totals.persuadable * conversionRate / 100);
+    const fromWatch = Math.round(totals.watch * conversionRate * 0.3 / 100);
+    return totals.supporter + fromPersuadable + fromWatch;
+  }, [totals, conversionRate]);
+
+  // Action list — top 10 "hareket et" (persuadable + watch, sorted by urgency)
+  const actionList = useMemo(() =>
+    mergedSeed
+      .filter(c => c.status === "persuadable" || c.status === "watch")
+      .sort((a, b) =>
+        (b.priorityScore - b.relationshipStrength * 0.3) -
+        (a.priorityScore - a.relationshipStrength * 0.3)
+      )
+      .slice(0, 10),
+    [mergedSeed]
+  );
+
+  // Roadmap for selected country
+  const roadmap = useMemo(() =>
+    buildCountryRoadmap({
+      countryCode: selected.countryCode,
+      countryName: selected.countryName,
+      continent: selected.continent,
+      status: selected.status,
+      primaryNeed: selected.primaryNeed,
+      relationshipStrength: selected.relationshipStrength,
+    }),
+    [selected]
+  );
+
+  // Country contact logs
+  const selectedContactLogs = contactLogs[selectedCode] ?? [];
 
   return (
     <>
@@ -617,32 +831,40 @@ const AppMain = () => {
       {/* ── Header ── */}
       <header className="hdr">
         <div className="hdr-brand">
-          <span className="hdr-eyebrow">FIG Seçim · Suat Çelen</span>
+          <span className="hdr-eyebrow">{t(lang,"hdr_eyebrow")}</span>
           <div className="hdr-votes">
             <span className="hdr-vote-num">{totals.supporter}</span>
             <span className="hdr-vote-sep">/</span>
             <span className="hdr-vote-total">{majority}</span>
-            <span className="hdr-vote-label">çoğunluk için</span>
+            <span className="hdr-vote-label">{t(lang,"hdr_majority")}</span>
           </div>
         </div>
         <nav className="hdr-nav">
-          {(["dashboard","map","countries","notes"] as AppView[]).map(v => {
-            const labels: Record<AppView,string> = { dashboard:"Durum", map:"Harita", countries:"Federasyonlar", notes:"Notlar" };
-            const icons: Record<AppView, React.ReactElement> = { dashboard:<IcGrid/>, map:<IcMap/>, countries:<IcGlobe/>, notes:<IcNote/> };
+          {(["dashboard","map","countries","vaatler","notes"] as AppView[]).map(v => {
+            const labels: Record<AppView,string> = { dashboard:t(lang,"nav_dashboard"), map:t(lang,"nav_map"), countries:t(lang,"nav_countries"), vaatler:t(lang,"nav_promises"), notes:t(lang,"nav_notes") };
+            const icons: Record<AppView, React.ReactElement> = { dashboard:<IcGrid/>, map:<IcMap/>, countries:<IcGlobe/>, vaatler:<IcHandshake/>, notes:<IcNote/> };
             return (
               <button key={v} className={`hdr-tab ${view===v?"active":""}`} onClick={() => setView(v)} type="button">
                 {icons[v]}{labels[v]}
               </button>
             );
           })}
+          <button
+            type="button"
+            className="lang-toggle"
+            onClick={() => setLang(lang === "tr" ? "en" : "tr")}
+            title="Switch language / Dil değiştir"
+          >
+            {lang === "tr" ? "🇬🇧 EN" : "🇹🇷 TR"}
+          </button>
         </nav>
       </header>
 
-      {/* ── Top Nav ── */}
+      {/* ── Bottom Nav ── */}
       <nav className="bottom-nav">
-        {(["dashboard","map","countries","notes"] as AppView[]).map(v => {
-          const labels: Record<AppView,string> = { dashboard:"Durum", map:"Harita", countries:"Federasyonlar", notes:"Notlar" };
-          const icons: Record<AppView, React.ReactElement> = { dashboard:<IcGrid/>, map:<IcMap/>, countries:<IcGlobe/>, notes:<IcNote/> };
+        {(["dashboard","map","countries","vaatler","notes"] as AppView[]).map(v => {
+          const labels: Record<AppView,string> = { dashboard:t(lang,"nav_dashboard"), map:t(lang,"nav_map"), countries:t(lang,"nav_countries"), vaatler:t(lang,"nav_promises"), notes:t(lang,"nav_notes") };
+          const icons: Record<AppView, React.ReactElement> = { dashboard:<IcGrid/>, map:<IcMap/>, countries:<IcGlobe/>, vaatler:<IcHandshake/>, notes:<IcNote/> };
           return (
             <button key={v} type="button" className={`nav-tab ${view===v?"active":""}`} onClick={() => { setView(v); setSheet(null); }}>
               <span className="nav-tab-icon">{icons[v]}</span>
@@ -657,10 +879,10 @@ const AppMain = () => {
         {view === "dashboard" && (
           <div className="tab-scroll">
             <section className="section">
-              <h2 className="section-title">Oy Durumu</h2>
+              <h2 className="section-title">{t(lang,"vote_title")}</h2>
               <div className="vote-progress-card">
-                <div className="vote-big">{totals.supporter} <span>destekçi</span></div>
-                <div className="vote-goal">Hedef: {majority} · Toplam: {totals.total}</div>
+                <div className="vote-big">{totals.supporter} <span>{t(lang,"vote_supporter")}</span></div>
+                <div className="vote-goal">{t(lang,"hdr_goal")}: {majority} · {t(lang,"hdr_total")}: {totals.total}</div>
                 <div className="progress-track">
                   <div className="progress-fill green" style={{ width: `${(totals.supporter/totals.total)*100}%` }} />
                   <div className="progress-fill blue"  style={{ width: `${(totals.persuadable/totals.total)*100}%` }} />
@@ -668,35 +890,47 @@ const AppMain = () => {
                   <div className="progress-fill red"   style={{ width: `${(totals.resistant/totals.total)*100}%` }} />
                 </div>
                 <div className="vote-legend">
-                  <span className="dot green"/><b>{totals.supporter}</b> Destekçi
-                  <span className="dot blue"/><b>{totals.persuadable}</b> İkna Edilebilir
-                  <span className="dot amber"/><b>{totals.watch}</b> İzle
-                  <span className="dot red"/><b>{totals.resistant}</b> Dirençli
+                  <span className="dot green"/><b>{totals.supporter}</b> {t(lang,"status_supporter")}
+                  <span className="dot blue"/><b>{totals.persuadable}</b> {t(lang,"status_persuadable")}
+                  <span className="dot amber"/><b>{totals.watch}</b> {t(lang,"status_watch")}
+                  <span className="dot red"/><b>{totals.resistant}</b> {t(lang,"status_resistant")}
                 </div>
               </div>
             </section>
 
             <section className="section">
-              <h2 className="section-title">Kıtalar</h2>
+              <h2 className="section-title">{t(lang,"continents_title")}</h2>
               {(["EG","AGU","UAG","PAGU","OGU"] as ContinentCode[]).map(code => {
                 const meta = continentMeta[code];
                 const s = continentStats[code];
                 if (!s) return null;
                 const pct = s.total > 0 ? Math.round((s.supporter / s.total) * 100) : 0;
+                const accent = meta.accent;
                 return (
-                  <div key={code} className="continent-row" onClick={() => { setContinentFilter(code); setView("countries"); }}>
+                  <div
+                    key={code}
+                    className="continent-row"
+                    style={{ background: `${accent}15`, borderColor: `${accent}35` }}
+                    onClick={() => { setContinentFilter(code); setView("countries"); }}
+                  >
                     <div className="continent-row-left">
                       <span className="continent-flag">{meta.flag}</span>
                       <div>
-                        <div className="continent-name">{meta.label}</div>
-                        <div className="continent-sub">{s.total} federasyon · <span style={{color:"#10D9A0"}}>{s.supporter} destekçi</span></div>
+                        <div className="continent-name" style={{ color: accent }}>{t(lang,`continent_${code}`)}</div>
+                        <div className="continent-sub">{s.total} {t(lang,"federation_lbl")}</div>
+                        <div className="continent-stats">
+                          <span className="cs-green">✓ {s.supporter}</span>
+                          <span className="cs-blue">◈ {s.persuadable}</span>
+                          <span className="cs-amber">◎ {s.watch}</span>
+                          <span className="cs-red">✕ {s.resistant}</span>
+                        </div>
                       </div>
                     </div>
                     <div className="continent-row-right">
                       <div className="mini-bar-track">
-                        <div className="mini-bar-fill" style={{ width: `${pct}%`, background: "#10D9A0" }} />
+                        <div className="mini-bar-fill" style={{ width: `${pct}%`, background: accent }} />
                       </div>
-                      <span className="continent-pct">{pct}%</span>
+                      <span className="continent-pct" style={{ color: accent }}>{pct}%</span>
                       <IcChevronRight />
                     </div>
                   </div>
@@ -704,15 +938,82 @@ const AppMain = () => {
               })}
             </section>
 
+            {/* Oy Simülatörü */}
             <section className="section">
-              <h2 className="section-title">Öncelikli Hedefler</h2>
+              <h2 className="section-title">{lang === "tr" ? "Oy Projeksiyonu" : "Vote Projection"}</h2>
+              <div className="sim-card">
+                <div className="sim-big">
+                  <span className="sim-num" style={{ color: projected >= majority ? "var(--green)" : "var(--amber)" }}>{projected}</span>
+                  <span className="sim-sep">/</span>
+                  <span className="sim-goal">{majority}</span>
+                  {projected >= majority && <span className="sim-check">✓</span>}
+                </div>
+                <div className="sim-bar-wrap">
+                  <div className="progress-track">
+                    <div className="progress-fill green" style={{ width: `${Math.min((projected / totals.total) * 100, 100)}%` }} />
+                  </div>
+                  <div className="sim-pct">{Math.round((projected / totals.total) * 100)}%</div>
+                </div>
+                <div className="sim-detail">
+                  <span>{lang === "tr" ? "İkna edilebilir" : "Persuadable"}: <b>{totals.persuadable}</b></span>
+                  <span>{lang === "tr" ? "İzlenen" : "Watch"}: <b>{totals.watch}</b></span>
+                  <span>{lang === "tr" ? "Hedef dönüşüm" : "Conversion"}: <b>%{conversionRate}</b></span>
+                </div>
+                <div className="sim-slider-row">
+                  <span className="sim-slider-label">0%</span>
+                  <input
+                    type="range"
+                    className="sim-slider"
+                    min={0}
+                    max={100}
+                    value={conversionRate}
+                    onChange={e => setConversionRate(Number(e.target.value))}
+                  />
+                  <span className="sim-slider-label">100%</span>
+                </div>
+                <div className="sim-scenarios">
+                  <div className={`sim-scenario ${totals.supporter + Math.round(totals.persuadable * 0.5) >= majority ? "sim-ok" : "sim-warn"}`}>
+                    %50 → {totals.supporter + Math.round(totals.persuadable * 0.5)} {lang === "tr" ? "oy" : "votes"}
+                    {totals.supporter + Math.round(totals.persuadable * 0.5) >= majority ? " ✓" : ` (${majority - totals.supporter - Math.round(totals.persuadable * 0.5)} ${lang === "tr" ? "eksik" : "short"})`}
+                  </div>
+                  <div className={`sim-scenario ${totals.supporter + Math.round(totals.persuadable * 0.33) >= majority ? "sim-ok" : "sim-warn"}`}>
+                    %33 → {totals.supporter + Math.round(totals.persuadable * 0.33)} {lang === "tr" ? "oy" : "votes"}
+                    {totals.supporter + Math.round(totals.persuadable * 0.33) >= majority ? " ✓" : ` (${majority - totals.supporter - Math.round(totals.persuadable * 0.33)} ${lang === "tr" ? "eksik" : "short"})`}
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {/* Aksiyon Listesi */}
+            <section className="section">
+              <h2 className="section-title">{lang === "tr" ? "🔥 Bu Hafta Hareket Et" : "🔥 Act This Week"}</h2>
+              {actionList.map((c, i) => (
+                <div key={c.countryCode} className="action-row" onClick={() => openDossier(c.countryCode)}>
+                  <span className="action-rank">{i + 1}</span>
+                  <div className="action-info">
+                    <div className="action-name">
+                      <span className="flag-emoji">{flagEmoji(c.countryCode)}</span>
+                      {trName(c)} <span className="country-code-tag">{c.countryCode}</span>
+                      <span className={`badge ${STATUS_CSS[c.status]}`} style={{ marginLeft:6 }}>{t(lang,`status_${c.status}`)}</span>
+                    </div>
+                    <div className="action-sub">
+                      {t(lang,"relationship")}: {c.relationshipStrength}/100 · {t(lang,`continent_${c.continent}`)} · {primaryNeedLabel(c.primaryNeed)}
+                    </div>
+                  </div>
+                  <div className="priority-score" style={{ color: statusTone(c.status).color }}>{fmtScore(c.priorityScore)}</div>
+                </div>
+              ))}
+            </section>
+
+            <section className="section">
+              <h2 className="section-title">{t(lang,"priority_title")}</h2>
               {mergedSeed.filter(c => c.status === "persuadable").slice(0, 8).map(c => (
                 <div key={c.countryCode} className="priority-row" onClick={() => openDossier(c.countryCode)}>
                   <div className="priority-row-left">
-                    <span className={`badge ${STATUS_CSS[c.status]}`}>{STATUS_TR[c.status]}</span>
+                    <span className={`badge ${STATUS_CSS[c.status]}`}>{t(lang,`status_${c.status}`)}</span>
                     <div>
                       <div className="priority-name"><span className="flag-emoji">{flagEmoji(c.countryCode)}</span>{trName(c)} <span className="country-code-tag">{c.countryCode}</span></div>
-                      <div className="priority-sub">{continentMeta[c.continent]?.label} · {primaryNeedLabel(c.primaryNeed)}</div>
+                      <div className="priority-sub">{t(lang,`continent_${c.continent}`)} · {primaryNeedLabel(c.primaryNeed)}</div>
                     </div>
                   </div>
                   <div className="priority-score" style={{ color: statusTone(c.status).color }}>{fmtScore(c.priorityScore)}</div>
@@ -761,7 +1062,7 @@ const AppMain = () => {
               {(["supporter","persuadable","watch","resistant"] as SupportStatus[]).map(s => (
                 <div key={s} className="map-legend-item">
                   <span className="map-legend-dot" style={{ background: MAP_COLOR[s] }} />
-                  <span>{STATUS_TR[s]}</span>
+                  <span>{t(lang,`status_${s}`)}</span>
                 </div>
               ))}
             </div>
@@ -778,13 +1079,13 @@ const AppMain = () => {
           {mapPreview && selected && (
             <div className="map-bar-overlay">
               <div className="map-bar">
-                <PresidentAvatar countryCode={selected.countryCode} presidentName={selected.president} size="sm" />
+                <PresidentAvatar countryCode={selected.countryCode} presidentName={selected.president} size="sm" photoOverride={photoOverrides[selected.countryCode]} />
                 <div style={{ minWidth: 0, flex: 1 }} onClick={() => { setDossierTab("genel"); setShowScoreInfo(false); setSheet("dossier"); }}>
                   <div className="map-bar-name"><span className="flag-emoji">{flagEmoji(selected.countryCode)}</span>{trName(selected)} <span className="map-bar-code">{selected.countryCode}</span></div>
-                  <div className="map-bar-sub">{selected.president} · {continentMeta[selected.continent]?.label}</div>
+                  <div className="map-bar-sub">{selected.president} · {t(lang,`continent_${selected.continent}`)}</div>
                 </div>
                 <div style={{ display:"flex", gap:8, alignItems:"center", flexShrink:0 }}>
-                  <button className="map-bar-btn" type="button" onClick={() => { setDossierTab("genel"); setShowScoreInfo(false); setSheet("dossier"); }}>Dosya Aç</button>
+                  <button className="map-bar-btn" type="button" onClick={() => { setDossierTab("genel"); setShowScoreInfo(false); setSheet("dossier"); }}>{t(lang,"open_file")}</button>
                   <button type="button" className="map-bar-close" onClick={() => setMapPreview(null)}><IcX /></button>
                 </div>
               </div>
@@ -799,7 +1100,7 @@ const AppMain = () => {
             <div className="search-bar">
               <input
                 className="search-input"
-                placeholder="Ülke, başkan, federasyon ara…"
+                placeholder={t(lang,"search_placeholder")}
                 value={search}
                 onChange={e => setSearch(e.target.value)}
               />
@@ -809,28 +1110,28 @@ const AppMain = () => {
               {(["all","supporter","persuadable","watch","resistant"] as (FilterValue<SupportStatus>)[]).map(s => (
                 <button key={s} type="button" className={`pill ${statusFilter===s?"pill-active":""}`}
                   onClick={() => setStatusFilter(s)}>
-                  {s === "all" ? "Tümü" : STATUS_TR[s as SupportStatus]}
+                  {s === "all" ? t(lang,"status_all") : t(lang,`status_${s}`)}
                 </button>
               ))}
             </div>
 
             <div className="filter-pills">
-              <button type="button" className={`pill ${continentFilter==="all"?"pill-active":""}`} onClick={() => setContinentFilter("all")}>Tüm Kıtalar</button>
+              <button type="button" className={`pill ${continentFilter==="all"?"pill-active":""}`} onClick={() => setContinentFilter("all")}>{t(lang,"continent_all")}</button>
               {(["EG","AGU","UAG","PAGU","OGU"] as ContinentCode[]).map(code => (
                 <button key={code} type="button" className={`pill ${continentFilter===code?"pill-active":""}`} onClick={() => setContinentFilter(code)}>
-                  {continentMeta[code]?.flag} {continentMeta[code]?.label}
+                  {continentMeta[code]?.flag} {t(lang,`continent_${code}`)}
                 </button>
               ))}
             </div>
 
-            <div className="list-count">{filtered.length} federasyon</div>
+            <div className="list-count">{filtered.length} {t(lang,"list_count")}</div>
 
             {filtered.map(c => {
               const dirEntry = directoryByCode[c.countryCode];
               return (
               <div key={c.countryCode} className="country-card" onClick={() => openDossier(c.countryCode)}>
                 <div className="country-card-left">
-                  <PresidentAvatar countryCode={c.countryCode} presidentName={c.president} size="md" />
+                  <PresidentAvatar countryCode={c.countryCode} presidentName={c.president} size="md" photoOverride={photoOverrides[c.countryCode]} />
                   <div style={{ minWidth: 0 }}>
                     <div className="country-card-name"><span className="flag-emoji">{flagEmoji(c.countryCode)}</span>{trName(c)} <span className="country-code-tag">{c.countryCode}</span></div>
                     <div className="country-card-sub">{c.president}</div>
@@ -847,10 +1148,10 @@ const AppMain = () => {
                   </div>
                 </div>
                 <div className="country-card-right">
-                  <span className={`badge ${STATUS_CSS[c.status]}`}>{STATUS_TR[c.status]}</span>
+                  <span className={`badge ${STATUS_CSS[c.status]}`}>{t(lang,`status_${c.status}`)}</span>
                   <span className="country-card-score">{fmtScore(c.priorityScore)}</span>
                   {(c.facilityScore ?? 0) > 0 && (
-                    <div className="card-facility-mini" title={`Tesis: ${c.facilityScore}/100`}>
+                    <div className="card-facility-mini" title={`${t(lang,"facilities_lbl")}: ${c.facilityScore}/100`}>
                       <div className="card-facility-fill" style={{ width: `${c.facilityScore}%` }} />
                     </div>
                   )}
@@ -872,13 +1173,13 @@ const AppMain = () => {
                   setSheet("dossier");
                   setNoteReturnCode(null);
                 }}>
-                  ← {COUNTRY_TR[noteReturnCode] ?? noteReturnCode} Dosyasına Dön
+                  ← {COUNTRY_TR[noteReturnCode] ?? noteReturnCode} {t(lang,"back_to_file")}
                 </button>
               </div>
             )}
             <section className="section">
               <div className="notes-header-row">
-                <h2 className="section-title">Yeni Not</h2>
+                <h2 className="section-title">{t(lang,"new_note")}</h2>
               </div>
               <div className="note-country-selector">
                 <select
@@ -888,25 +1189,25 @@ const AppMain = () => {
                 >
                   {ranked.map(c => (
                     <option key={c.countryCode} value={c.countryCode}>
-                      {trName(c)} ({c.countryCode}) — {STATUS_TR[mergedByCode[c.countryCode]?.status ?? c.status]}
+                      {trName(c)} ({c.countryCode}) — {t(lang,`status_${mergedByCode[c.countryCode]?.status ?? c.status}`)}
                     </option>
                   ))}
                 </select>
               </div>
               <form className="note-form" onSubmit={addNote}>
-                <input className="note-input" placeholder="Not başlığı" value={noteTitle} onChange={e => setNoteTitle(e.target.value)} required />
-                <textarea className="note-textarea" placeholder="Not içeriği…" rows={4} value={noteBody} onChange={e => setNoteBody(e.target.value)} required />
-                <button className="note-submit" type="submit">Not Ekle</button>
+                <input className="note-input" placeholder={t(lang,"note_title_ph")} value={noteTitle} onChange={e => setNoteTitle(e.target.value)} required />
+                <textarea className="note-textarea" placeholder={t(lang,"note_body_ph")} rows={4} value={noteBody} onChange={e => setNoteBody(e.target.value)} required />
+                <button className="note-submit" type="submit">{t(lang,"note_add_btn")}</button>
               </form>
             </section>
 
             {notes.length === 0 ? (
-              <div className="empty-state">Henüz not yok. Federasyon seç ve not ekle.</div>
+              <div className="empty-state">{t(lang,"no_notes")}</div>
             ) : (
               <>
                 {notes.filter(n => !n.completed).length > 0 && (
                   <section className="section">
-                    <h2 className="section-title">Aktif <span className="note-count">{notes.filter(n => !n.completed).length}</span></h2>
+                    <h2 className="section-title">{t(lang,"active_lbl")} <span className="note-count">{notes.filter(n => !n.completed).length}</span></h2>
                     {notes.filter(n => !n.completed).map(n => (
                       <div key={n.id} className="note-card">
                         <div className="note-card-header">
@@ -927,7 +1228,7 @@ const AppMain = () => {
                 )}
                 {notes.filter(n => n.completed).length > 0 && (
                   <section className="section">
-                    <h2 className="section-title" style={{ color:"var(--muted)" }}>Tamamlandı <span className="note-count">{notes.filter(n => n.completed).length}</span></h2>
+                    <h2 className="section-title" style={{ color:"var(--muted)" }}>{t(lang,"completed_lbl")} <span className="note-count">{notes.filter(n => n.completed).length}</span></h2>
                     {notes.filter(n => n.completed).map(n => (
                       <div key={n.id} className="note-card note-card-done">
                         <div className="note-card-header">
@@ -949,6 +1250,177 @@ const AppMain = () => {
             )}
           </div>
         )}
+        {/* ══ VAATLER ══ */}
+        {view === "vaatler" && (
+          <div className="tab-scroll">
+            <div className="vaatler-header">
+              <h2 className="section-title">{t(lang,"promises_title")}</h2>
+              <button type="button" className="promise-add-btn" onClick={() => { resetPromiseForm(); setShowPromiseForm(true); }}>
+                <IcPlus /> {t(lang,"add_promise")}
+              </button>
+            </div>
+
+            {/* Sekmeler */}
+            <div className="filter-pills">
+              {(["active","archive","all"] as PromiseTab[]).map(tab => (
+                <button key={tab} type="button" className={`pill ${promiseTab === tab ? "pill-active" : ""}`} onClick={() => setPromiseTab(tab)}>
+                  {tab === "active" ? t(lang,"promises_active") : tab === "archive" ? t(lang,"promises_archive") : t(lang,"promises_all")}
+                </button>
+              ))}
+            </div>
+
+            {/* Yeni vaat formu */}
+            {showPromiseForm && (
+              <form className="promise-form" onSubmit={savePromise}>
+                <textarea
+                  className="note-textarea"
+                  placeholder={t(lang,"promise_text_ph")}
+                  value={promiseText}
+                  onChange={e => setPromiseText(e.target.value)}
+                  rows={3}
+                  required
+                />
+
+                <div className="promise-form-grid">
+                  <div className="promise-form-field">
+                    <label className="promise-form-label">{t(lang,"promise_category")}</label>
+                    <select className="promise-select" value={promiseCategory} onChange={e => setPromiseCategory(e.target.value as PromiseCategory)}>
+                      {(["finansman","etkinlik","egitim","teknik","yonetisim","diger"] as PromiseCategory[]).map(cat => (
+                        <option key={cat} value={cat}>{t(lang,`pcat_${cat}`)}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="promise-form-field">
+                    <label className="promise-form-label">{t(lang,"promise_status")}</label>
+                    <select className="promise-select" value={promiseStatus} onChange={e => setPromiseStatus(e.target.value as PromiseStatus)}>
+                      {(["verildi","devam","tamamlandi","iptal"] as PromiseStatus[]).map(st => (
+                        <option key={st} value={st}>{t(lang,`pstatus_${st}`)}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="promise-form-field">
+                    <label className="promise-form-label">{t(lang,"promise_date_given")}</label>
+                    <input type="date" className="promise-input" value={promiseDateGiven} onChange={e => setPromiseDateGiven(e.target.value)} />
+                  </div>
+
+                  <div className="promise-form-field">
+                    <label className="promise-form-label">{t(lang,"promise_due_date")}</label>
+                    <input type="date" className="promise-input" value={promiseDueDate} onChange={e => setPromiseDueDate(e.target.value)} />
+                  </div>
+                </div>
+
+                <div className="promise-form-field">
+                  <label className="promise-form-label">{t(lang,"promise_countries")}</label>
+                  <select
+                    className="promise-select promise-country-select"
+                    multiple
+                    value={promiseCountries}
+                    onChange={e => setPromiseCountries(Array.from(e.target.selectedOptions, o => o.value))}
+                  >
+                    {ranked.map(c => (
+                      <option key={c.countryCode} value={c.countryCode}>
+                        {flagEmoji(c.countryCode)} {trName(c)} ({c.countryCode})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <textarea
+                  className="note-textarea"
+                  placeholder={t(lang,"promise_notes")}
+                  value={promiseNotes}
+                  onChange={e => setPromiseNotes(e.target.value)}
+                  rows={2}
+                />
+
+                <div style={{ display:"flex", gap:8 }}>
+                  <button className="note-submit" type="submit">{t(lang,"promise_save")}</button>
+                  <button className="note-cancel" type="button" onClick={resetPromiseForm}>{t(lang,"promise_cancel")}</button>
+                </div>
+              </form>
+            )}
+
+            {/* Vaat listesi */}
+            {(() => {
+              const PROMISE_STATUS_CSS: Record<PromiseStatus, string> = {
+                verildi: "badge-blue", devam: "badge-amber", tamamlandi: "badge-green", iptal: "badge-red"
+              };
+              const PROMISE_CAT_COLORS: Record<PromiseCategory, string> = {
+                finansman: "#34D399", etkinlik: "#60A5FA", egitim: "#A78BFA",
+                teknik: "#F59E0B", yonetisim: "#F472B6", diger: "#94A3B8"
+              };
+
+              const filteredPromises = promises.filter(p => {
+                if (promiseTab === "active") return p.status === "verildi" || p.status === "devam";
+                if (promiseTab === "archive") return p.status === "tamamlandi" || p.status === "iptal";
+                return true;
+              });
+
+              if (filteredPromises.length === 0) return (
+                <div className="empty-state">
+                  {promiseTab === "active" ? t(lang,"promise_empty_active") :
+                   promiseTab === "archive" ? t(lang,"promise_empty_archive") : t(lang,"promise_empty")}
+                </div>
+              );
+
+              return filteredPromises.map(p => (
+                <div key={p.id} className="promise-card">
+                  <div className="promise-card-top">
+                    <span
+                      className="promise-cat-chip"
+                      style={{ background: `${PROMISE_CAT_COLORS[p.category]}20`, color: PROMISE_CAT_COLORS[p.category], borderColor: `${PROMISE_CAT_COLORS[p.category]}40` }}
+                    >
+                      {t(lang,`pcat_${p.category}`)}
+                    </span>
+                    <div className="promise-flags">
+                      {p.countryCodes.length === 0 ? (
+                        <span className="promise-general-tag">{t(lang,"promise_general")}</span>
+                      ) : (
+                        <>
+                          {p.countryCodes.slice(0, 6).map(code => (
+                            <span key={code} className="promise-flag-emoji" title={code}>{flagEmoji(code)}</span>
+                          ))}
+                          {p.countryCodes.length > 6 && <span className="promise-more">+{p.countryCodes.length - 6}</span>}
+                        </>
+                      )}
+                    </div>
+                    <span className={`badge ${PROMISE_STATUS_CSS[p.status]}`}>{t(lang,`pstatus_${p.status}`)}</span>
+                  </div>
+
+                  <div className="promise-text">{p.text}</div>
+
+                  {(p.dateGiven || p.dueDate) && (
+                    <div className="promise-dates">
+                      {p.dateGiven && <span>📅 {p.dateGiven}</span>}
+                      {p.dueDate && <span>→ {p.dueDate}</span>}
+                    </div>
+                  )}
+
+                  {p.notes && <div className="promise-note-text">{p.notes}</div>}
+
+                  <div className="promise-card-footer">
+                    <select
+                      className="promise-status-select"
+                      value={p.status}
+                      onChange={e => updatePromiseStatus(p.id, e.target.value as PromiseStatus)}
+                    >
+                      {(["verildi","devam","tamamlandi","iptal"] as PromiseStatus[]).map(st => (
+                        <option key={st} value={st}>{t(lang,`pstatus_${st}`)}</option>
+                      ))}
+                    </select>
+                    <div style={{ marginLeft:"auto", display:"flex", gap:8 }}>
+                      <button type="button" className="promise-edit-btn" onClick={() => startEditPromise(p)}><IcEdit /></button>
+                      <button type="button" className="promise-delete-btn" onClick={() => { if (window.confirm(t(lang,"promise_delete") + "?")) deletePromise(p.id); }}><IcX /></button>
+                    </div>
+                  </div>
+                </div>
+              ));
+            })()}
+          </div>
+        )}
+
       </main>
     </div>{/* /shell */}
 
@@ -981,7 +1453,7 @@ const AppMain = () => {
                 className={`status-chip ${selected.status === s ? "status-chip-active " + STATUS_CSS[s] : ""}`}
                 onClick={() => setOverride(selectedCode, { status: s })}
               >
-                {STATUS_TR[s]}
+                {t(lang,`status_${s}`)}
               </button>
             ))}
           </div>
@@ -990,48 +1462,53 @@ const AppMain = () => {
           <div className="ds-metrics">
             <div className="ds-metric ds-metric-clickable" onClick={() => setShowScoreInfo(v => !v)}>
               <div className="ds-metric-val">{fmtScore(selected.priorityScore)}</div>
-              <div className="ds-metric-key">Öncelik <span className="score-info-icon">?</span></div>
+              <div className="ds-metric-key">{t(lang,"priority_score")} <span className="score-info-icon">?</span></div>
             </div>
             <div className="ds-metric">
               <div className="ds-metric-val">{selected.figPowerIndex}</div>
-              <div className="ds-metric-key">FIG Gücü</div>
+              <div className="ds-metric-key">{t(lang,"fig_power")}</div>
             </div>
             <div className="ds-metric">
               <div className="ds-metric-val">{selected.relationshipStrength}</div>
-              <div className="ds-metric-key">İlişki</div>
+              <div className="ds-metric-key">{t(lang,"relationship")}</div>
             </div>
             <div className="ds-metric">
               <div className="ds-metric-val">{(selected.figRoles ?? []).length}</div>
-              <div className="ds-metric-key">FIG Rolü</div>
+              <div className="ds-metric-key">{t(lang,"fig_role")}</div>
             </div>
           </div>
 
           {/* Skor açıklaması */}
           {showScoreInfo && (
             <div className="score-info-box">
-              <div className="score-info-title">Öncelik Puanı Nasıl Hesaplanır?</div>
-              <div className="score-info-formula">Durum + İhtiyaç + Etki × 0.42 + (100 − İlişki) × 0.28</div>
+              <div className="score-info-title">{t(lang,"score_info_title")}</div>
+              <div className="score-info-formula">{t(lang,"score_info_formula")}</div>
               <div className="score-info-rows">
-                <div className="score-info-row"><span>Destekçi</span><b>18</b></div>
-                <div className="score-info-row"><span>İzle</span><b>50</b></div>
-                <div className="score-info-row"><span>İkna Edilebilir</span><b>84</b></div>
-                <div className="score-info-row"><span>Dirençli</span><b>12</b></div>
-                <div className="score-info-row"><span>Gelişim ihtiyacı</span><b>+18</b></div>
-                <div className="score-info-row"><span>Finansman ihtiyacı</span><b>+17</b></div>
-                <div className="score-info-row"><span>Yönetişim ihtiyacı</span><b>+15</b></div>
+                <div className="score-info-row"><span>{t(lang,"status_supporter")}</span><b>18</b></div>
+                <div className="score-info-row"><span>{t(lang,"status_watch")}</span><b>50</b></div>
+                <div className="score-info-row"><span>{t(lang,"status_persuadable")}</span><b>84</b></div>
+                <div className="score-info-row"><span>{t(lang,"status_resistant")}</span><b>12</b></div>
+                <div className="score-info-row"><span>{lang === "tr" ? "Gelişim ihtiyacı" : "Development need"}</span><b>+18</b></div>
+                <div className="score-info-row"><span>{lang === "tr" ? "Finansman ihtiyacı" : "Funding need"}</span><b>+17</b></div>
+                <div className="score-info-row"><span>{lang === "tr" ? "Yönetişim ihtiyacı" : "Governance need"}</span><b>+15</b></div>
               </div>
             </div>
           )}
 
           {/* Tabs */}
           <div className="ds-tabs">
-            {(["genel","iletisim","branşlar","spor","istihbarat"] as DossierTab[]).map(t => {
-              const labels: Record<DossierTab,string> = {
-                genel:"Strateji", iletisim:"İletişim", "branşlar":"Branşlar", spor:"Spor", istihbarat:"İstihbarat"
+            {(["genel","mesaj","iletisim","branşlar","spor","istihbarat"] as DossierTab[]).map(tab => {
+              const tabLabels: Record<DossierTab,string> = {
+                genel: t(lang,"tab_strategy"),
+                mesaj: lang === "tr" ? "Mesaj" : "Message",
+                iletisim: t(lang,"tab_contact"),
+                "branşlar": t(lang,"tab_disciplines"),
+                spor: t(lang,"tab_sport"),
+                istihbarat: t(lang,"tab_intelligence")
               };
               return (
-                <button key={t} type="button" className={`ds-tab-btn ${dossierTab===t?"active":""}`} onClick={() => setDossierTab(t)}>
-                  {labels[t]}
+                <button key={tab} type="button" className={`ds-tab-btn ${dossierTab===tab?"active":""}`} onClick={() => setDossierTab(tab)}>
+                  {tabLabels[tab]}
                 </button>
               );
             })}
@@ -1042,19 +1519,19 @@ const AppMain = () => {
             {dossierTab === "genel" && (
               <>
                 <div className="ds-block">
-                  <div className="ds-block-label">Ne İstiyor?</div>
+                  <div className="ds-block-label">{t(lang,"what_want")}</div>
                   <div className="ds-block-val">{primaryNeedLabel(selected.primaryNeed)}</div>
                 </div>
 
                 <EditableBlock
-                  label="Stratejik Değerlendirme"
+                  label={t(lang,"strategic_assess")}
                   value={getAssessment(selected)}
                   onSave={v => setOverride(selectedCode, { assessment: v })}
                 />
 
                 {getEntryChannel(selected) && (
                   <EditableBlock
-                    label="Temas Kanalı"
+                    label={t(lang,"entry_channel")}
                     value={getEntryChannel(selected)}
                     onSave={v => setOverride(selectedCode, { entryChannel: v })}
                   />
@@ -1062,7 +1539,7 @@ const AppMain = () => {
 
                 {getRedLine(selected) && (
                   <EditableBlock
-                    label="Dikkat Edilecek"
+                    label={t(lang,"red_line")}
                     value={getRedLine(selected)}
                     onSave={v => setOverride(selectedCode, { redLine: v })}
                     warn
@@ -1071,23 +1548,23 @@ const AppMain = () => {
 
                 {/* Notes in strategy tab */}
                 <div className="ds-notes-header">
-                  <span className="ds-block-label">Notlar {countryNotes.length > 0 && <span className="note-count">{countryNotes.length}</span>}</span>
+                  <span className="ds-block-label">{t(lang,"notes_lbl")} {countryNotes.length > 0 && <span className="note-count">{countryNotes.length}</span>}</span>
                   <div style={{ display:"flex", gap:8 }}>
                     <button type="button" className="ds-notes-add-btn" onClick={() => setShowNoteForm(v => !v)}>
-                      <IcPlus /> Not Ekle
+                      <IcPlus /> {t(lang,"add_note")}
                     </button>
                     <button type="button" className="ds-notes-all-btn" onClick={() => { setNoteReturnCode(selectedCode); setSheet(null); setView("notes"); }}>
-                      Tümü →
+                      {t(lang,"all_notes")}
                     </button>
                   </div>
                 </div>
                 {showNoteForm && (
                   <form className="note-form" onSubmit={e => { addNote(e); setShowNoteForm(false); }}>
-                    <input className="note-input" placeholder="Not başlığı" value={noteTitle} onChange={e => setNoteTitle(e.target.value)} required />
-                    <textarea className="note-textarea" placeholder="Not içeriği…" rows={3} value={noteBody} onChange={e => setNoteBody(e.target.value)} required />
+                    <input className="note-input" placeholder={t(lang,"note_title_ph")} value={noteTitle} onChange={e => setNoteTitle(e.target.value)} required />
+                    <textarea className="note-textarea" placeholder={t(lang,"note_body_ph")} rows={3} value={noteBody} onChange={e => setNoteBody(e.target.value)} required />
                     <div style={{ display:"flex", gap:8 }}>
-                      <button className="note-submit" type="submit">Kaydet</button>
-                      <button className="note-cancel" type="button" onClick={() => { setShowNoteForm(false); setNoteTitle(""); setNoteBody(""); }}>İptal</button>
+                      <button className="note-submit" type="submit">{t(lang,"save")}</button>
+                      <button className="note-cancel" type="button" onClick={() => { setShowNoteForm(false); setNoteTitle(""); setNoteBody(""); }}>{t(lang,"cancel")}</button>
                     </div>
                   </form>
                 )}
@@ -1106,6 +1583,114 @@ const AppMain = () => {
                     {!n.completed && <div className="note-card-body">{n.body}</div>}
                   </div>
                 ))}
+
+                {/* Yol haritası */}
+                <div className="ds-block" style={{ marginTop: 16 }}>
+                  <div className="ds-block-label">{lang === "tr" ? "6 Aylık Eylem Planı" : "6-Month Action Plan"}</div>
+                  <div className="roadmap-timeline">
+                    {roadmap.map((step, i) => (
+                      <div key={i} className="roadmap-step">
+                        <div className="roadmap-month">{step.month}</div>
+                        <div className="roadmap-body">
+                          <div className="roadmap-focus">{step.focus}</div>
+                          <div className="roadmap-objective">{step.objective}</div>
+                          <div className="roadmap-deliverable">→ {step.deliverable}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* ── MESAJ REHBERİ ── */}
+            {dossierTab === "mesaj" && (
+              <>
+                {/* Ana Mesajlar */}
+                {(selected.messaging ?? []).length > 0 && (
+                  <div className="ds-block">
+                    <div className="ds-block-label">💬 {lang === "tr" ? "Ana Mesajlar" : "Key Messages"}</div>
+                    {selected.messaging.map((m, i) => (
+                      <div key={i} className="msg-item">
+                        <span className="msg-bullet">•</span>
+                        <span className="msg-text">{translateStrategicText(m)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* İkna Argümanları */}
+                {(selected.persuasionPayload ?? []).length > 0 && (
+                  <div className="ds-block">
+                    <div className="ds-block-label">🎯 {lang === "tr" ? "İkna Argümanları" : "Persuasion Payload"}</div>
+                    {selected.persuasionPayload.map((p, i) => (
+                      <div key={i} className="msg-item">
+                        <span className="msg-bullet">▸</span>
+                        <span className="msg-text">{translateStrategicText(p)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Kongre Senaryosu */}
+                {(selected.congressScenario ?? []).length > 0 && (
+                  <div className="ds-block">
+                    <div className="ds-block-label">⚖️ {lang === "tr" ? "Kongre Senaryosu" : "Congress Scenario"}</div>
+                    {selected.congressScenario.map((c, i) => (
+                      <div key={i} className="msg-item">
+                        <span className="msg-bullet">◈</span>
+                        <span className="msg-text">{translateStrategicText(c)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Bu Ay Temas Noktası */}
+                {(selected.monthlyHooks ?? []).length > 0 && (
+                  <div className="ds-block">
+                    <div className="ds-block-label">📅 {lang === "tr" ? "Aylık Temas Noktaları" : "Monthly Hooks"}</div>
+                    {selected.monthlyHooks.map((h, i) => (
+                      <div key={i} className="msg-item">
+                        <span className="msg-bullet">📌</span>
+                        <span className="msg-text">{translateStrategicText(h)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Sunum Kartları (visualDeck) */}
+                {(selected.visualDeck ?? []).length > 0 && (
+                  <div className="ds-block">
+                    <div className="ds-block-label">📊 {lang === "tr" ? "Sunum Kartları" : "Visual Deck"}</div>
+                    <div className="vdeck-grid">
+                      {selected.visualDeck.map((card, i) => (
+                        <div key={i} className={`vdeck-card vdeck-${card.tone}`}>
+                          <div className="vdeck-metric">{card.metric}</div>
+                          <div className="vdeck-title">{card.title}</div>
+                          <div className="vdeck-caption">{card.caption}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Beklentiler */}
+                {(selected.expectations ?? []).length > 0 && (
+                  <div className="ds-block">
+                    <div className="ds-block-label">📋 {lang === "tr" ? "Beklentiler" : "Expectations"}</div>
+                    {selected.expectations.map((ex, i) => (
+                      <div key={i} className="msg-item">
+                        <span className="msg-bullet">•</span>
+                        <span className="msg-text">{translateStrategicText(ex)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Boş durum */}
+                {!(selected.messaging?.length) && !(selected.persuasionPayload?.length) && !(selected.congressScenario?.length) && (
+                  <div className="empty-state">{lang === "tr" ? "Bu federasyon için mesaj verisi bulunmuyor." : "No messaging data for this federation."}</div>
+                )}
               </>
             )}
 
@@ -1114,9 +1699,22 @@ const AppMain = () => {
               <>
                 {/* Başkan Fotoğraf Kartı */}
                 <div className="president-card">
-                  <PresidentAvatar countryCode={selected.countryCode} presidentName={selected.president} size="xl" />
+                  <div className="president-avatar-wrap">
+                    <PresidentAvatar countryCode={selected.countryCode} presidentName={selected.president} size="xl" photoOverride={photoOverrides[selected.countryCode]} />
+                    <button
+                      type="button"
+                      className="photo-edit-btn"
+                      title={t(lang,"edit_photo")}
+                      onClick={() => {
+                        setPhotoEditCode(selected.countryCode);
+                        setPhotoEditUrl(photoOverrides[selected.countryCode] ?? "");
+                      }}
+                    >
+                      <IcCamera />
+                    </button>
+                  </div>
                   <div className="president-card-info">
-                    <div className="president-card-role">Federasyon Başkanı</div>
+                    <div className="president-card-role">{t(lang,"president_role")}</div>
                     <div className="president-card-name">{selected.president}</div>
                     {PHOTO_SOURCE[selected.countryCode] && (
                       <a
@@ -1132,14 +1730,81 @@ const AppMain = () => {
                   </div>
                 </div>
 
+                {/* Photo URL inline editor */}
+                {photoEditCode === selected.countryCode && (
+                  <div className="photo-edit-block">
+                    <input
+                      className="photo-edit-input"
+                      type="url"
+                      placeholder={t(lang,"edit_photo")}
+                      value={photoEditUrl}
+                      onChange={e => setPhotoEditUrl(e.target.value)}
+                      autoFocus
+                    />
+                    <div style={{ display:"flex", gap:8, marginTop:8 }}>
+                      <button type="button" className="note-submit" onClick={() => savePhotoOverride(selected.countryCode, photoEditUrl)}>{t(lang,"photo_save")}</button>
+                      <button type="button" className="note-cancel" onClick={() => { setPhotoEditCode(null); setPhotoEditUrl(""); }}>{t(lang,"photo_cancel")}</button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Başkan kişisel telefonu */}
                 <div className="ds-block">
-                  <div className="ds-block-label">Federasyon</div>
+                  <div className="ds-block-label-row">
+                    <span className="ds-block-label">{t(lang,"pres_phone_lbl")}</span>
+                    <button type="button" className="edit-btn" onClick={() => {
+                      setPhoneEditCode(selected.countryCode);
+                      setPhoneEditVal(overrides[selected.countryCode]?.presidentPhone ?? "");
+                    }}><IcEdit /></button>
+                  </div>
+                  {phoneEditCode === selected.countryCode ? (
+                    <div>
+                      <input
+                        className="photo-edit-input"
+                        type="tel"
+                        placeholder={t(lang,"phone_placeholder")}
+                        value={phoneEditVal}
+                        onChange={e => setPhoneEditVal(e.target.value)}
+                        autoFocus
+                      />
+                      <div style={{ display:"flex", gap:8, marginTop:8 }}>
+                        <button type="button" className="note-submit" onClick={() => {
+                          setOverride(selected.countryCode, { presidentPhone: phoneEditVal.trim() });
+                          setPhoneEditCode(null);
+                        }}>{t(lang,"save")}</button>
+                        <button type="button" className="note-cancel" onClick={() => setPhoneEditCode(null)}>{t(lang,"cancel")}</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="president-phone-row">
+                      {overrides[selected.countryCode]?.presidentPhone ? (
+                        <>
+                          <span className="contact-main">{overrides[selected.countryCode].presidentPhone}</span>
+                          <a
+                            className="whatsapp-btn"
+                            href={`https://wa.me/${(overrides[selected.countryCode].presidentPhone ?? "").replace(/\D/g,"")}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={e => e.stopPropagation()}
+                          >
+                            <IcWhatsApp /> {t(lang,"whatsapp_btn")}
+                          </a>
+                        </>
+                      ) : (
+                        <span className="contact-empty">—</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="ds-block">
+                  <div className="ds-block-label">{t(lang,"federation_name")}</div>
                   <div className="ds-block-val" style={{ fontSize: 14 }}>{selectedDir?.federationName ?? selected.federationName}</div>
                 </div>
 
                 {selectedDir?.secretaryGeneral && (
                   <div className="ds-block">
-                    <div className="ds-block-label">Genel Sekreter</div>
+                    <div className="ds-block-label">{t(lang,"sec_general")}</div>
                     <div className="contact-row">
                       <div className="contact-main">{selectedDir.secretaryGeneral}</div>
                     </div>
@@ -1148,7 +1813,7 @@ const AppMain = () => {
 
                 {selectedDir?.email && (
                   <div className="ds-block">
-                    <div className="ds-block-label">E-posta</div>
+                    <div className="ds-block-label">{t(lang,"email_lbl")}</div>
                     <div className="contact-row">
                       <div className="contact-main contact-link">{selectedDir.email}</div>
                     </div>
@@ -1157,21 +1822,21 @@ const AppMain = () => {
 
                 {selectedDir?.phone && (
                   <div className="ds-block">
-                    <div className="ds-block-label">Telefon</div>
+                    <div className="ds-block-label">{t(lang,"phone_lbl")}</div>
                     <div className="contact-main">{selectedDir.phone}</div>
                   </div>
                 )}
 
                 {selectedDir?.website && (
                   <div className="ds-block">
-                    <div className="ds-block-label">Website</div>
+                    <div className="ds-block-label">{t(lang,"website_lbl")}</div>
                     <div className="contact-main contact-link">{selectedDir.website}</div>
                   </div>
                 )}
 
                 {(selectedDir?.addressLine1 || selectedDir?.city) && (
                   <div className="ds-block">
-                    <div className="ds-block-label">Adres</div>
+                    <div className="ds-block-label">{t(lang,"address_lbl")}</div>
                     <div className="ds-block-text">
                       {[selectedDir?.addressLine1, selectedDir?.addressLine2, selectedDir?.city, selectedDir?.country].filter(Boolean).join(", ")}
                     </div>
@@ -1180,7 +1845,7 @@ const AppMain = () => {
 
                 {selectedDir?.disciplines && selectedDir.disciplines.length > 0 && (
                   <div className="ds-block">
-                    <div className="ds-block-label">Branşlar</div>
+                    <div className="ds-block-label">{t(lang,"disciplines_lbl")}</div>
                     <div className="discipline-chips">
                       {selectedDir.disciplines.map(d => (
                         <span key={d} className="discipline-chip">{d}</span>
@@ -1422,18 +2087,68 @@ const AppMain = () => {
                   </div>
                 ) : null}
 
-                {/* Temas Geçmişi */}
-                {(selected.contactLog as unknown as Array<{ date: string; note: string }> | undefined)?.length ? (
-                  <div className="ds-block">
-                    <div className="ds-block-label">Temas Geçmişi</div>
-                    {(selected.contactLog as unknown as Array<{ date: string; note: string }>).slice(0, 5).map((l, i) => (
+                {/* Temas Geçmişi — Firebase */}
+                <div className="ds-block">
+                  <div className="ds-block-label-row">
+                    <span className="ds-block-label">{lang === "tr" ? "Temas Geçmişi" : "Contact History"} {selectedContactLogs.length > 0 && <span className="note-count">{selectedContactLogs.length}</span>}</span>
+                    <button type="button" className="ds-notes-add-btn" onClick={() => setShowContactForm(v => !v)}>
+                      <IcPlus /> {lang === "tr" ? "Temas Ekle" : "Add Contact"}
+                    </button>
+                  </div>
+
+                  {showContactForm && (
+                    <form className="contact-log-form" onSubmit={saveContactLog}>
+                      <div className="promise-form-grid">
+                        <div className="promise-form-field">
+                          <label className="promise-form-label">{lang === "tr" ? "Tarih" : "Date"}</label>
+                          <input type="date" className="promise-input" value={contactDate} onChange={e => setContactDate(e.target.value)} />
+                        </div>
+                        <div className="promise-form-field">
+                          <label className="promise-form-label">{lang === "tr" ? "Kanal" : "Channel"}</label>
+                          <select className="promise-select" value={contactChannel} onChange={e => setContactChannel(e.target.value as ContactLogEntry["channel"])}>
+                            <option value="call">{lang === "tr" ? "Telefon" : "Phone Call"}</option>
+                            <option value="email">E-posta</option>
+                            <option value="visit">{lang === "tr" ? "Yüz yüze" : "In Person"}</option>
+                            <option value="desk">{lang === "tr" ? "Masa / Not" : "Desk / Note"}</option>
+                          </select>
+                        </div>
+                      </div>
+                      <textarea
+                        className="note-textarea"
+                        placeholder={lang === "tr" ? "Görüşme özeti…" : "Meeting summary…"}
+                        value={contactSummary}
+                        onChange={e => setContactSummary(e.target.value)}
+                        rows={3}
+                        required
+                      />
+                      <input
+                        className="note-input"
+                        placeholder={lang === "tr" ? "Sonraki adım…" : "Next step…"}
+                        value={contactNextStep}
+                        onChange={e => setContactNextStep(e.target.value)}
+                      />
+                      <div style={{ display:"flex", gap:8, marginTop:6 }}>
+                        <button className="note-submit" type="submit">{t(lang,"save")}</button>
+                        <button className="note-cancel" type="button" onClick={() => setShowContactForm(false)}>{t(lang,"cancel")}</button>
+                      </div>
+                    </form>
+                  )}
+
+                  {selectedContactLogs.length > 0 ? (
+                    selectedContactLogs.slice(0, 8).map((l, i) => (
                       <div key={i} className="contact-log-row">
                         <span className="log-date">{l.date}</span>
-                        <span className="log-note">{l.note}</span>
+                        <span className="log-channel">{l.channel}</span>
+                        <span className="log-note">{l.summary}</span>
+                        {l.nextStep && <span className="log-next">→ {l.nextStep}</span>}
                       </div>
-                    ))}
-                  </div>
-                ) : null}
+                    ))
+                  ) : (
+                    <div className="empty-state" style={{ fontSize:12, padding:"8px 0" }}>
+                      {lang === "tr" ? "Henüz temas kaydı yok." : "No contact history yet."}
+                    </div>
+                  )}
+                </div>
 
                 {/* Diplomatik Müttefikler */}
                 {selected.diplomaticAllies?.length > 0 && (

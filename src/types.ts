@@ -206,3 +206,18 @@ export interface RoadmapStep {
   objective: string;
   deliverable: string;
 }
+
+// ── Vaatler ──────────────────────────────────────────────────────────────
+export type PromiseStatus = "verildi" | "devam" | "tamamlandi" | "iptal";
+export type PromiseCategory = "finansman" | "etkinlik" | "egitim" | "teknik" | "yonetisim" | "diger";
+
+export interface FigPromise {
+  id: string;
+  text: string;
+  countryCodes: string[];   // boş = genel vaat
+  category: PromiseCategory;
+  dateGiven?: string;       // "YYYY-MM-DD"
+  dueDate?: string;         // "YYYY-MM-DD"
+  status: PromiseStatus;
+  notes?: string;
+}

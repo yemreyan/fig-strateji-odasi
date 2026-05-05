@@ -56,7 +56,7 @@ import type {
 type AppView = "dashboard" | "map" | "countries" | "vaatler" | "notes";
 type Sheet = "dossier" | null;
 type FilterValue<T extends string> = T | "all";
-type DossierTab = "genel" | "iletisim" | "branşlar" | "spor" | "istihbarat" | "mesaj";
+type DossierTab = "genel" | "mesaj" | "iletisim" | "branşlar" | "istihbarat";
 type PromiseTab = "active" | "archive" | "all";
 
 // Notes
@@ -376,6 +376,7 @@ const CODE_TO_NUMERIC: Record<string, string> = {
   TUN:"788",LBA:"434",SUD:"729",RWA:"646",NAM:"516",LBR:"430",SLE:"694",
   GAB:"266",CGO:"178",COD:"180",MTN:"478",MAW:"454",MRI:"480",SEY:"690",
   SOM:"706",LES:"426",SWZ:"748",STP:"678",CPV:"132",COM:"174",
+  DJI:"262",ERI:"232",GMB:"270",GNB:"624",GNQ:"226",
   // Avrupa (eksikler)
   EST:"233",LAT:"428",LTU:"440",LUX:"442",IRL:"372",ISL:"352",LIE:"438",
   SMR:"674",MON:"492",MLT:"470",MNE:"499",KOS:"383",CYP:"196",
@@ -428,6 +429,28 @@ const EditableBlock = ({
         <button type="button" className="edit-btn" onClick={() => { setDraft(value); setEditing(true); }}><IcEdit /></button>
       </div>
       <div className="ds-block-text">{value}</div>
+    </div>
+  );
+};
+
+// ── Discipline Note Editor ─────────────────────────────────────────────
+const DisciplineNoteEditor = ({ note, onSave }: { note: string; onSave: (v: string) => void }) => {
+  const [val, setVal] = useState(note);
+  const [editing, setEditing] = useState(false);
+  useEffect(() => setVal(note), [note]);
+  if (!editing) return (
+    <div style={{ display:"flex", gap:6, alignItems:"center", marginTop:6 }}>
+      {note && <span style={{ fontSize:12, color:"var(--muted)", flex:1 }}>{note}</span>}
+      <button type="button" className="edit-btn" onClick={() => setEditing(true)}><IcEdit /></button>
+    </div>
+  );
+  return (
+    <div style={{ marginTop:6 }}>
+      <textarea className="note-textarea" rows={2} value={val} onChange={e => setVal(e.target.value)} style={{ fontSize:12 }} />
+      <div style={{ display:"flex", gap:6, marginTop:4 }}>
+        <button type="button" className="note-submit" style={{ fontSize:11 }} onClick={() => { onSave(val); setEditing(false); }}>Kaydet</button>
+        <button type="button" className="note-cancel" style={{ fontSize:11 }} onClick={() => { setVal(note); setEditing(false); }}>İptal</button>
+      </div>
     </div>
   );
 };
@@ -537,6 +560,16 @@ const AppMain = () => {
   // Contact logs — synced from Firebase
   const [contactLogs, setContactLogs] = useState<Record<string, ContactLogEntry[]>>({});
 
+  // Content overrides — editable mesaj/istihbarat alanları
+  const [contentOverrides, setContentOverrides] = useState<Record<string, Record<string, string[]>>>({});
+
+  // Editing state for content fields
+  const [editingContentField, setEditingContentField] = useState<string | null>(null);
+  const [contentDraft, setContentDraft] = useState("");
+
+  // Discipline notes
+  const [disciplineNotes, setDisciplineNotes] = useState<Record<string, Record<string, string>>>({});
+
   // Contact log form UI
   const [showContactForm, setShowContactForm] = useState(false);
   const [contactDate, setContactDate] = useState(new Date().toISOString().slice(0, 10));
@@ -595,6 +628,20 @@ const AppMain = () => {
     return unsub;
   }, []);
 
+  useEffect(() => {
+    const unsub = onValue(ref(db, "fig-v3/contentOverrides"), snap => {
+      setContentOverrides(snap.val() ?? {});
+    });
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    const unsub = onValue(ref(db, "fig-v3/disciplineNotes"), snap => {
+      setDisciplineNotes(snap.val() ?? {});
+    });
+    return unsub;
+  }, []);
+
   // Harita dışına çıkınca mapPreview sıfırla
   useEffect(() => {
     if (view !== "map") setMapPreview(null);
@@ -626,8 +673,13 @@ const AppMain = () => {
 
   // Photo override
   const savePhotoOverride = (code: string, url: string) => {
-    if (url.trim()) set(ref(db, `fig-v3/photo-overrides/${code}`), url.trim());
-    else remove(ref(db, `fig-v3/photo-overrides/${code}`));
+    if (url.trim()) {
+      set(ref(db, `fig-v3/photo-overrides/${code}`), url.trim());
+      setPhotoOverrides(prev => ({ ...prev, [code]: url.trim() })); // anında güncelle
+    } else {
+      remove(ref(db, `fig-v3/photo-overrides/${code}`));
+      setPhotoOverrides(prev => { const n = {...prev}; delete n[code]; return n; });
+    }
     setPhotoEditCode(null);
     setPhotoEditUrl("");
   };
@@ -700,6 +752,27 @@ const AppMain = () => {
     setShowPromiseForm(true);
   };
 
+  // Content field save
+  const saveContentField = (code: string, field: string, lines: string[]) => {
+    const clean = lines.filter(l => l.trim());
+    if (clean.length > 0) set(ref(db, `fig-v3/contentOverrides/${code}/${field}`), clean);
+    else remove(ref(db, `fig-v3/contentOverrides/${code}/${field}`));
+    setContentOverrides(prev => ({
+      ...prev,
+      [code]: { ...(prev[code] ?? {}), [field]: clean }
+    }));
+  };
+
+  // Discipline note save
+  const saveDisciplineNote = (code: string, discipline: string, note: string) => {
+    if (note.trim()) set(ref(db, `fig-v3/disciplineNotes/${code}/${discipline}`), note.trim());
+    else remove(ref(db, `fig-v3/disciplineNotes/${code}/${discipline}`));
+    setDisciplineNotes(prev => ({
+      ...prev,
+      [code]: { ...(prev[code] ?? {}), [discipline]: note.trim() }
+    }));
+  };
+
   // Status ağırlıkları (priorityScore yeniden hesaplamak için)
   const STATUS_WEIGHT: Record<SupportStatus, number> = {
     supporter: 18, watch: 50, persuadable: 84, resistant: 12
@@ -758,6 +831,19 @@ const AppMain = () => {
   const getRedLine = (c: FederationSeed) => overrides[c.countryCode]?.redLine ?? translateStrategicText((c.redLines ?? [])[0] ?? "");
 
   const sportHighlights = useMemo(() => buildSportHighlights(selected).filter(Boolean), [selected]);
+
+  // Content override helper — Firebase override yoksa seed verisi kullan
+  const getContent = (code: string, field: keyof FederationSeed): string[] => {
+    const ov = contentOverrides[code]?.[field as string];
+    const seed = mergedByCode[code];
+    return ov ?? ((seed?.[field] as string[] | undefined) ?? []);
+  };
+
+  // İstihbarat alanları helper
+  const getDiplomaticAllies = (code: string): string[] =>
+    contentOverrides[code]?.diplomaticAllies ?? (mergedByCode[code]?.diplomaticAllies ?? []);
+  const getFrictionPoints = (code: string): string[] =>
+    contentOverrides[code]?.frictionPoints ?? (mergedByCode[code]?.frictionPoints ?? []);
 
   const openDossier = (code: string) => {
     setSelectedCode(code);
@@ -1512,13 +1598,12 @@ const AppMain = () => {
 
           {/* Tabs */}
           <div className="ds-tabs">
-            {(["genel","mesaj","iletisim","branşlar","spor","istihbarat"] as DossierTab[]).map(tab => {
+            {(["genel","mesaj","iletisim","branşlar","istihbarat"] as DossierTab[]).map(tab => {
               const tabLabels: Record<DossierTab,string> = {
                 genel: t(lang,"tab_strategy"),
                 mesaj: lang === "tr" ? "Mesaj" : "Message",
                 iletisim: t(lang,"tab_contact"),
                 "branşlar": t(lang,"tab_disciplines"),
-                spor: t(lang,"tab_sport"),
                 istihbarat: t(lang,"tab_intelligence")
               };
               return (
@@ -1659,56 +1744,124 @@ const AppMain = () => {
             {dossierTab === "mesaj" && (
               <>
                 {/* Ana Mesajlar */}
-                {(selected.messaging ?? []).length > 0 && (
-                  <div className="ds-block">
-                    <div className="ds-block-label">💬 {lang === "tr" ? "Ana Mesajlar" : "Key Messages"}</div>
-                    {selected.messaging.map((m, i) => (
+                <div className="ds-block">
+                  <div className="ds-block-label-row">
+                    <span className="ds-block-label">💬 {lang === "tr" ? "Ana Mesajlar" : "Key Messages"}</span>
+                    <button type="button" className="edit-btn" onClick={() => { setEditingContentField("messaging"); setContentDraft(getContent(selectedCode,"messaging").join("\n")); }}><IcEdit /></button>
+                  </div>
+                  {editingContentField === "messaging" ? (
+                    <>
+                      <textarea className="edit-textarea" rows={6} value={contentDraft} onChange={e => setContentDraft(e.target.value)} autoFocus />
+                      <div className="edit-actions">
+                        <button type="button" className="edit-save" onClick={() => { saveContentField(selectedCode,"messaging",contentDraft.split("\n")); setEditingContentField(null); }}><IcCheck /> Kaydet</button>
+                        <button type="button" className="edit-cancel" onClick={() => setEditingContentField(null)}>İptal</button>
+                      </div>
+                    </>
+                  ) : (
+                    getContent(selectedCode,"messaging").map((m, i) => (
                       <div key={i} className="msg-item">
                         <span className="msg-bullet">•</span>
                         <span className="msg-text">{translateStrategicText(m)}</span>
                       </div>
-                    ))}
-                  </div>
-                )}
+                    ))
+                  )}
+                </div>
 
                 {/* İkna Argümanları */}
-                {(selected.persuasionPayload ?? []).length > 0 && (
-                  <div className="ds-block">
-                    <div className="ds-block-label">🎯 {lang === "tr" ? "İkna Argümanları" : "Persuasion Payload"}</div>
-                    {selected.persuasionPayload.map((p, i) => (
+                <div className="ds-block">
+                  <div className="ds-block-label-row">
+                    <span className="ds-block-label">🎯 {lang === "tr" ? "İkna Argümanları" : "Persuasion Payload"}</span>
+                    <button type="button" className="edit-btn" onClick={() => { setEditingContentField("persuasionPayload"); setContentDraft(getContent(selectedCode,"persuasionPayload").join("\n")); }}><IcEdit /></button>
+                  </div>
+                  {editingContentField === "persuasionPayload" ? (
+                    <>
+                      <textarea className="edit-textarea" rows={6} value={contentDraft} onChange={e => setContentDraft(e.target.value)} autoFocus />
+                      <div className="edit-actions">
+                        <button type="button" className="edit-save" onClick={() => { saveContentField(selectedCode,"persuasionPayload",contentDraft.split("\n")); setEditingContentField(null); }}><IcCheck /> Kaydet</button>
+                        <button type="button" className="edit-cancel" onClick={() => setEditingContentField(null)}>İptal</button>
+                      </div>
+                    </>
+                  ) : (
+                    getContent(selectedCode,"persuasionPayload").map((p, i) => (
                       <div key={i} className="msg-item">
                         <span className="msg-bullet">▸</span>
                         <span className="msg-text">{translateStrategicText(p)}</span>
                       </div>
-                    ))}
-                  </div>
-                )}
+                    ))
+                  )}
+                </div>
 
                 {/* Kongre Senaryosu */}
-                {(selected.congressScenario ?? []).length > 0 && (
-                  <div className="ds-block">
-                    <div className="ds-block-label">⚖️ {lang === "tr" ? "Kongre Senaryosu" : "Congress Scenario"}</div>
-                    {selected.congressScenario.map((c, i) => (
+                <div className="ds-block">
+                  <div className="ds-block-label-row">
+                    <span className="ds-block-label">⚖️ {lang === "tr" ? "Kongre Senaryosu" : "Congress Scenario"}</span>
+                    <button type="button" className="edit-btn" onClick={() => { setEditingContentField("congressScenario"); setContentDraft(getContent(selectedCode,"congressScenario").join("\n")); }}><IcEdit /></button>
+                  </div>
+                  {editingContentField === "congressScenario" ? (
+                    <>
+                      <textarea className="edit-textarea" rows={6} value={contentDraft} onChange={e => setContentDraft(e.target.value)} autoFocus />
+                      <div className="edit-actions">
+                        <button type="button" className="edit-save" onClick={() => { saveContentField(selectedCode,"congressScenario",contentDraft.split("\n")); setEditingContentField(null); }}><IcCheck /> Kaydet</button>
+                        <button type="button" className="edit-cancel" onClick={() => setEditingContentField(null)}>İptal</button>
+                      </div>
+                    </>
+                  ) : (
+                    getContent(selectedCode,"congressScenario").map((c, i) => (
                       <div key={i} className="msg-item">
                         <span className="msg-bullet">◈</span>
                         <span className="msg-text">{translateStrategicText(c)}</span>
                       </div>
-                    ))}
-                  </div>
-                )}
+                    ))
+                  )}
+                </div>
 
-                {/* Bu Ay Temas Noktası */}
-                {(selected.monthlyHooks ?? []).length > 0 && (
-                  <div className="ds-block">
-                    <div className="ds-block-label">📅 {lang === "tr" ? "Aylık Temas Noktaları" : "Monthly Hooks"}</div>
-                    {selected.monthlyHooks.map((h, i) => (
+                {/* Aylık Kancalar */}
+                <div className="ds-block">
+                  <div className="ds-block-label-row">
+                    <span className="ds-block-label">📅 {lang === "tr" ? "Aylık Temas Noktaları" : "Monthly Hooks"}</span>
+                    <button type="button" className="edit-btn" onClick={() => { setEditingContentField("monthlyHooks"); setContentDraft(getContent(selectedCode,"monthlyHooks").join("\n")); }}><IcEdit /></button>
+                  </div>
+                  {editingContentField === "monthlyHooks" ? (
+                    <>
+                      <textarea className="edit-textarea" rows={6} value={contentDraft} onChange={e => setContentDraft(e.target.value)} autoFocus />
+                      <div className="edit-actions">
+                        <button type="button" className="edit-save" onClick={() => { saveContentField(selectedCode,"monthlyHooks",contentDraft.split("\n")); setEditingContentField(null); }}><IcCheck /> Kaydet</button>
+                        <button type="button" className="edit-cancel" onClick={() => setEditingContentField(null)}>İptal</button>
+                      </div>
+                    </>
+                  ) : (
+                    getContent(selectedCode,"monthlyHooks").map((h, i) => (
                       <div key={i} className="msg-item">
                         <span className="msg-bullet">📌</span>
                         <span className="msg-text">{translateStrategicText(h)}</span>
                       </div>
-                    ))}
+                    ))
+                  )}
+                </div>
+
+                {/* Kaçınılacak Konular */}
+                <div className="ds-block">
+                  <div className="ds-block-label-row">
+                    <span className="ds-block-label">🚫 {lang === "tr" ? "Kaçınılacak Konular" : "Red Lines"}</span>
+                    <button type="button" className="edit-btn" onClick={() => { setEditingContentField("redLines"); setContentDraft(getContent(selectedCode,"redLines").join("\n")); }}><IcEdit /></button>
                   </div>
-                )}
+                  {editingContentField === "redLines" ? (
+                    <>
+                      <textarea className="edit-textarea" rows={6} value={contentDraft} onChange={e => setContentDraft(e.target.value)} autoFocus />
+                      <div className="edit-actions">
+                        <button type="button" className="edit-save" onClick={() => { saveContentField(selectedCode,"redLines",contentDraft.split("\n")); setEditingContentField(null); }}><IcCheck /> Kaydet</button>
+                        <button type="button" className="edit-cancel" onClick={() => setEditingContentField(null)}>İptal</button>
+                      </div>
+                    </>
+                  ) : (
+                    getContent(selectedCode,"redLines").map((r, i) => (
+                      <div key={i} className="msg-item">
+                        <span className="msg-bullet" style={{ color: "var(--red)" }}>✕</span>
+                        <span className="msg-text" style={{ color: "var(--red)" }}>{translateStrategicText(r)}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
 
                 {/* Sunum Kartları (visualDeck) */}
                 {(selected.visualDeck ?? []).length > 0 && (
@@ -1739,19 +1892,6 @@ const AppMain = () => {
                   </div>
                 )}
 
-                {/* Kaçınılacak Konular */}
-                {(selected.redLines ?? []).length > 0 && (
-                  <div className="ds-block">
-                    <div className="ds-block-label">🚫 {lang === "tr" ? "Kaçınılacak Konular" : "Red Lines"}</div>
-                    {selected.redLines.map((r, i) => (
-                      <div key={i} className="msg-item">
-                        <span className="msg-bullet" style={{ color: "var(--red)" }}>✕</span>
-                        <span className="msg-text" style={{ color: "var(--red)" }}>{translateStrategicText(r)}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
                 {/* Mesaj Çerçevesi */}
                 <div className="ds-block">
                   <div className="ds-block-label">🗣️ {lang === "tr" ? "Mesaj Çerçevesi" : "Message Framework"}</div>
@@ -1773,11 +1913,6 @@ const AppMain = () => {
                     </div>
                   ))}
                 </div>
-
-                {/* Boş durum */}
-                {!(selected.messaging?.length) && !(selected.persuasionPayload?.length) && !(selected.congressScenario?.length) && (
-                  <div className="empty-state">{lang === "tr" ? "Bu federasyon için mesaj verisi bulunmuyor." : "No messaging data for this federation."}</div>
-                )}
               </>
             )}
 
@@ -1828,6 +1963,26 @@ const AppMain = () => {
                       onChange={e => setPhotoEditUrl(e.target.value)}
                       autoFocus
                     />
+                    <div style={{ display:"flex", gap:8, alignItems:"center", marginTop:8 }}>
+                      <label className="file-upload-btn" style={{ cursor:"pointer" }}>
+                        📁 Bilgisayardan Seç
+                        <input
+                          type="file"
+                          accept="image/*"
+                          style={{ display:"none" }}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            const reader = new FileReader();
+                            reader.onload = (ev) => {
+                              const dataUrl = ev.target?.result as string;
+                              setPhotoEditUrl(dataUrl);
+                            };
+                            reader.readAsDataURL(file);
+                          }}
+                        />
+                      </label>
+                    </div>
                     <div style={{ display:"flex", gap:8, marginTop:8 }}>
                       <button type="button" className="note-submit" onClick={() => savePhotoOverride(selected.countryCode, photoEditUrl)}>{t(lang,"photo_save")}</button>
                       <button type="button" className="note-cancel" onClick={() => { setPhotoEditCode(null); setPhotoEditUrl(""); }}>{t(lang,"photo_cancel")}</button>
@@ -1998,6 +2153,12 @@ const AppMain = () => {
                         {discAthletes.length === 0 && highlights.length === 0 && (
                           <div className="discipline-empty">Kayıtlı sporcu/başarı verisi yok</div>
                         )}
+
+                        {/* Saha Notu */}
+                        <DisciplineNoteEditor
+                          note={disciplineNotes[selected.countryCode]?.[disc] ?? ""}
+                          onSave={(v) => saveDisciplineNote(selected.countryCode, disc, v)}
+                        />
                       </div>
                     );
                   })}
@@ -2028,156 +2189,6 @@ const AppMain = () => {
                 </>
               );
             })()}
-
-            {/* ── SPOR ── */}
-            {dossierTab === "spor" && (
-              <>
-                {/* Tesis & Altyapı */}
-                {((selected.facilityScore ?? 0) > 0 || selected.facilities) && (
-                  <div className="ds-block">
-                    <div className="ds-block-label">Tesis & Altyapı</div>
-                    {(selected.facilityScore ?? 0) > 0 && (
-                      <div className="stat-bar-row" style={{ marginBottom: 8 }}>
-                        <span className="stat-bar-label">Altyapı Skoru</span>
-                        <div className="stat-bar-track">
-                          <div className="stat-bar-fill" style={{ width: `${selected.facilityScore}%`, background: "#38BDF8" }} />
-                        </div>
-                        <span className="stat-bar-val">{selected.facilityScore}</span>
-                      </div>
-                    )}
-                    {selected.facilities && (
-                      <div className="ds-block-text" style={{ marginTop: 6 }}>{translateStrategicText(selected.facilities)}</div>
-                    )}
-                  </div>
-                )}
-
-                {/* Anahtar İstatistikler */}
-                <div className="ds-block">
-                  <div className="ds-block-label">Anahtar İstatistikler</div>
-                  <div className="stat-bar-row">
-                    <span className="stat-bar-label">FIG Gücü</span>
-                    <div className="stat-bar-track">
-                      <div className="stat-bar-fill" style={{ width: `${selected.figPowerIndex ?? 0}%`, background: "#A78BFA" }} />
-                    </div>
-                    <span className="stat-bar-val">{selected.figPowerIndex ?? 0}</span>
-                  </div>
-                  <div className="stat-bar-row">
-                    <span className="stat-bar-label">İlişki Gücü</span>
-                    <div className="stat-bar-track">
-                      <div className="stat-bar-fill" style={{ width: `${selected.relationshipStrength ?? 0}%`, background: "#10D9A0" }} />
-                    </div>
-                    <span className="stat-bar-val">{selected.relationshipStrength ?? 0}</span>
-                  </div>
-                  <div className="stat-bar-row">
-                    <span className="stat-bar-label">Etki Puanı</span>
-                    <div className="stat-bar-track">
-                      <div className="stat-bar-fill" style={{ width: `${selected.influence ?? 0}%`, background: "#F59E0B" }} />
-                    </div>
-                    <span className="stat-bar-val">{selected.influence ?? 0}</span>
-                  </div>
-                  {(selected.facilityScore ?? 0) > 0 && (
-                    <div className="stat-bar-row">
-                      <span className="stat-bar-label">Tesis</span>
-                      <div className="stat-bar-track">
-                        <div className="stat-bar-fill" style={{ width: `${selected.facilityScore}%`, background: "#38BDF8" }} />
-                      </div>
-                      <span className="stat-bar-val">{selected.facilityScore}</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Başarılar */}
-                {selected.achievements?.length > 0 && (
-                  <div className="ds-block">
-                    <div className="ds-block-label">Başarılar</div>
-                    {selected.achievements.slice(0, 5).map((a, i) => (
-                      <div key={i} className="achievement-row">
-                        <span className="achievement-bullet">▸</span>
-                        <span className="achievement-text">{translateStrategicText(a)}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Milli Takım */}
-                {sportHighlights.length > 0 && (
-                  <div className="ds-block">
-                    <div className="ds-block-label">Milli Takım Profili</div>
-                    {sportHighlights.map((h, i) => (
-                      <div key={i} className="achievement-row">
-                        <span className="achievement-bullet">▸</span>
-                        <span className="achievement-text">{h}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* FIG Rolleri */}
-                {selected.figRoles?.length > 0 && (
-                  <div className="ds-block">
-                    <div className="ds-block-label">FIG Rolleri</div>
-                    {selected.figRoles.slice(0, 5).map((r, i) => (
-                      <div key={i} className="role-row">
-                        <div className="role-name">{r.name}</div>
-                        <div className="role-title">{r.role}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Ev Sahipliği */}
-                {selected.hostedEvents?.length > 0 && (
-                  <div className="ds-block">
-                    <div className="ds-block-label">Ev Sahipliği</div>
-                    {selected.hostedEvents.slice(0, 4).map((e, i) => (
-                      <div key={i} className="achievement-row">
-                        <span className="achievement-bullet">▸</span>
-                        <span className="achievement-text">{translateStrategicText(e)}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Siyasi Güç Profili */}
-                {selected.politicalPower && (
-                  <div className="ds-block">
-                    <div className="ds-block-label">⚖️ {lang === "tr" ? "Siyasi Güç Profili" : "Political Power"}</div>
-                    <div className="ds-block-text">{translateStrategicText(selected.politicalPower)}</div>
-                    <div className="ds-block-text" style={{ marginTop: 6, opacity: 0.75 }}>{buildPowerNarrative(selected)}</div>
-                  </div>
-                )}
-
-                {/* Teknik & Hakemlik */}
-                {(selected.technicalCommitteeStatus || selected.judgesInfluence) && (
-                  <div className="ds-block">
-                    <div className="ds-block-label">🎯 {lang === "tr" ? "Teknik & Hakemlik" : "Technical & Judging"}</div>
-                    {selected.technicalCommitteeStatus && (
-                      <div className="msg-item">
-                        <span className="msg-bullet">▸</span>
-                        <span className="msg-text">{translateStrategicText(selected.technicalCommitteeStatus)}</span>
-                      </div>
-                    )}
-                    {selected.judgesInfluence && (
-                      <div className="msg-item">
-                        <span className="msg-bullet">▸</span>
-                        <span className="msg-text">{translateStrategicText(selected.judgesInfluence)}</span>
-                      </div>
-                    )}
-                    <div className="ds-block-text" style={{ marginTop: 6, opacity: 0.75 }}>{buildJudgeNarrative(selected)}</div>
-                  </div>
-                )}
-
-                {/* Sporcu Kapasitesi */}
-                <div className="ds-block">
-                  <div className="ds-block-label">🏃 {lang === "tr" ? "Sporcu Kapasitesi" : "Athlete Capacity"}</div>
-                  <div className="ds-block-text">{buildAthleteNarrative(selected)}</div>
-                </div>
-
-                {sportHighlights.length === 0 && !selected.achievements?.length && !selected.figRoles?.length && (selected.facilityScore ?? 0) === 0 && (
-                  <div className="empty-state">Bu federasyon için spor verisi bulunamadı.</div>
-                )}
-              </>
-            )}
 
             {/* ── İSTİHBARAT ── */}
             {dossierTab === "istihbarat" && (
@@ -2291,25 +2302,55 @@ const AppMain = () => {
                 )}
 
                 {/* Diplomatik Müttefikler */}
-                {selected.diplomaticAllies?.length > 0 && (
-                  <div className="ds-block">
-                    <div className="ds-block-label">Diplomatik Müttefikler</div>
-                    <div className="ds-block-text">{selected.diplomaticAllies.slice(0, 8).join(" · ")}</div>
+                <div className="ds-block">
+                  <div className="ds-block-label-row">
+                    <span className="ds-block-label">Diplomatik Müttefikler</span>
+                    <button type="button" className="edit-btn" onClick={() => { setEditingContentField("diplomaticAllies"); setContentDraft(getDiplomaticAllies(selectedCode).join(", ")); }}><IcEdit /></button>
                   </div>
-                )}
+                  {editingContentField === "diplomaticAllies" ? (
+                    <>
+                      <textarea className="edit-textarea" rows={3} value={contentDraft} onChange={e => setContentDraft(e.target.value)} placeholder="Virgülle ayırarak girin…" autoFocus />
+                      <div className="edit-actions">
+                        <button type="button" className="edit-save" onClick={() => { saveContentField(selectedCode,"diplomaticAllies",contentDraft.split(",").map(s=>s.trim()).filter(Boolean)); setEditingContentField(null); }}><IcCheck /> Kaydet</button>
+                        <button type="button" className="edit-cancel" onClick={() => setEditingContentField(null)}>İptal</button>
+                      </div>
+                    </>
+                  ) : (
+                    getDiplomaticAllies(selectedCode).length > 0 ? (
+                      <div className="ds-block-text">{getDiplomaticAllies(selectedCode).join(" · ")}</div>
+                    ) : (
+                      <div className="ds-block-text" style={{ opacity: 0.4 }}>—</div>
+                    )
+                  )}
+                </div>
 
                 {/* Sürtüşme Noktaları */}
-                {selected.frictionPoints?.length > 0 && (
-                  <div className="ds-block">
-                    <div className="ds-block-label">Sürtüşme Noktaları</div>
-                    {selected.frictionPoints.slice(0, 3).map((f, i) => (
-                      <div key={i} className="achievement-row">
-                        <span style={{ color: "var(--red)", marginRight: 6 }}>!</span>
-                        <span className="achievement-text">{translateStrategicText(f)}</span>
-                      </div>
-                    ))}
+                <div className="ds-block">
+                  <div className="ds-block-label-row">
+                    <span className="ds-block-label">Sürtüşme Noktaları</span>
+                    <button type="button" className="edit-btn" onClick={() => { setEditingContentField("frictionPoints"); setContentDraft(getFrictionPoints(selectedCode).join("\n")); }}><IcEdit /></button>
                   </div>
-                )}
+                  {editingContentField === "frictionPoints" ? (
+                    <>
+                      <textarea className="edit-textarea" rows={4} value={contentDraft} onChange={e => setContentDraft(e.target.value)} placeholder="Her satır bir madde…" autoFocus />
+                      <div className="edit-actions">
+                        <button type="button" className="edit-save" onClick={() => { saveContentField(selectedCode,"frictionPoints",contentDraft.split("\n").filter(s=>s.trim())); setEditingContentField(null); }}><IcCheck /> Kaydet</button>
+                        <button type="button" className="edit-cancel" onClick={() => setEditingContentField(null)}>İptal</button>
+                      </div>
+                    </>
+                  ) : (
+                    getFrictionPoints(selectedCode).length > 0 ? (
+                      getFrictionPoints(selectedCode).map((f, i) => (
+                        <div key={i} className="achievement-row">
+                          <span style={{ color: "var(--red)", marginRight: 6 }}>!</span>
+                          <span className="achievement-text">{translateStrategicText(f)}</span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="ds-block-text" style={{ opacity: 0.4 }}>—</div>
+                    )
+                  )}
+                </div>
 
                 {/* Kaynaklar */}
                 {(selected.sources as unknown as Array<{ url: string; label?: string }> | undefined)?.length ? (

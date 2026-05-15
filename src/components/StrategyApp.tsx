@@ -439,9 +439,12 @@ const DisciplineNoteEditor = ({ note, onSave }: { note: string; onSave: (v: stri
   const [editing, setEditing] = useState(false);
   useEffect(() => setVal(note), [note]);
   if (!editing) return (
-    <div style={{ display:"flex", gap:6, alignItems:"center", marginTop:6 }}>
-      {note && <span style={{ fontSize:12, color:"var(--muted)", flex:1 }}>{note}</span>}
-      <button type="button" className="edit-btn" onClick={() => setEditing(true)}><IcEdit /></button>
+    <div style={{ marginTop:8, padding:"6px 8px", background:"var(--surface2,#1a2533)", borderRadius:6 }}>
+      <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+        <span style={{ fontSize:11, fontWeight:600, color:"var(--muted)", letterSpacing:"0.05em", flex:1 }}>📝 Saha Notu</span>
+        <button type="button" className="edit-btn" onClick={() => setEditing(true)}><IcEdit /></button>
+      </div>
+      {note && <p style={{ fontSize:12, color:"var(--text)", margin:"4px 0 0", lineHeight:1.5 }}>{note}</p>}
     </div>
   );
   return (

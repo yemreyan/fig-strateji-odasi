@@ -30,6 +30,9 @@ import {
   buildPowerNarrative,
   buildJudgeNarrative,
   buildAthleteNarrative,
+  buildFacilityNarrative,
+  buildRoleDigest,
+  buildCountryDashboard,
   buildProofBullets,
   buildMessageBullets,
   continentMeta,
@@ -573,6 +576,17 @@ const AppMain = () => {
   // Discipline notes
   const [disciplineNotes, setDisciplineNotes] = useState<Record<string, Record<string, string>>>({});
 
+  // WhatsApp template copy state
+  const [msgCopied, setMsgCopied] = useState(false);
+
+  // Status history — synced from Firebase
+  const [statusHistory, setStatusHistory] = useState<Record<string,{from:string,to:string,date:string}[]>>({});
+
+  // Competitor analysis
+  const [competitor, setCompetitor] = useState<{name:string, knownSupporters:string[], estimatedVotes:number} | null>(null);
+  const [editingCompetitor, setEditingCompetitor] = useState(false);
+  const [competitorDraft, setCompetitorDraft] = useState({name:"", knownSupporters:"", estimatedVotes:0});
+
   // Contact log form UI
   const [showContactForm, setShowContactForm] = useState(false);
   const [contactDate, setContactDate] = useState(new Date().toISOString().slice(0, 10));
@@ -645,6 +659,20 @@ const AppMain = () => {
     return unsub;
   }, []);
 
+  useEffect(() => {
+    const shUnsub = onValue(ref(db, "fig-v3/statusHistory"), snap => {
+      setStatusHistory(snap.val() || {});
+    });
+    return shUnsub;
+  }, []);
+
+  useEffect(() => {
+    const compUnsub = onValue(ref(db, "fig-v3/competitor"), snap => {
+      setCompetitor(snap.val() || null);
+    });
+    return compUnsub;
+  }, []);
+
   // Harita dışına çıkınca mapPreview sıfırla
   useEffect(() => {
     if (view !== "map") setMapPreview(null);
@@ -672,6 +700,17 @@ const AppMain = () => {
   // Helper to update override for a country (writes to Firebase)
   const setOverride = (code: string, patch: Partial<CountryOverride>) => {
     update(ref(db, `fig-v3/overrides/${code}`), patch);
+    if (patch.status !== undefined) {
+      const existing = mergedByCode[code];
+      const oldStatus = overrides[code]?.status ?? existing?.status ?? "unknown";
+      if (oldStatus !== patch.status) {
+        const histRef = ref(db, `fig-v3/statusHistory/${code}`);
+        onValue(histRef, currentSnap => {
+          const currentHistory: {from:string,to:string,date:string}[] = currentSnap.val() || [];
+          set(histRef, [...currentHistory, { from: oldStatus, to: patch.status as string, date: new Date().toISOString().slice(0,10) }]);
+        }, { onlyOnce: true });
+      }
+    }
   };
 
   // Photo override
@@ -906,6 +945,47 @@ const AppMain = () => {
     [mergedSeed]
   );
 
+  // Feature 2: Congress countdown helpers
+  const CONGRESS_DATE = new Date("2026-10-01");
+  const getDaysToCongressFn = (): number => {
+    const today = new Date();
+    const diff = CONGRESS_DATE.getTime() - today.getTime();
+    return Math.max(0, Math.ceil(diff / (1000*60*60*24)));
+  };
+  const KEY_EVENTS = [
+    { date:"2026-06-15", label:"Dünya Kupası — Doha", countries:["QAT","KUW","BHR","UAE"] },
+    { date:"2026-07-20", label:"Pan-Amerikan Şampiyonası", countries:["BRA","ARG","COL","CHI"] },
+    { date:"2026-08-10", label:"Afrika Kupası", countries:["EGY","MAR","RSA","SEN"] },
+    { date:"2026-09-05", label:"Asya Şampiyonası", countries:["JPN","CHN","KOR","INA"] },
+    { date:"2026-10-01", label:"FIG Kongresi — Seçim", countries:[] },
+  ];
+
+  // Feature 3: Trend this month
+  const trendThisMonth = useMemo(() => {
+    const thisMonth = new Date().toISOString().slice(0,7);
+    let gained = 0, lost = 0;
+    Object.values(statusHistory).forEach(entries => {
+      entries.forEach(e => {
+        if (e.date.startsWith(thisMonth)) {
+          const goodStatuses = ["confirmed","leaning"];
+          const wasGood = goodStatuses.includes(e.from);
+          const isGood = goodStatuses.includes(e.to);
+          if (!wasGood && isGood) gained++;
+          if (wasGood && !isGood) lost++;
+        }
+      });
+    });
+    return { gained, lost };
+  }, [statusHistory]);
+
+  // Feature 1: WhatsApp template builder
+  function buildWhatsAppTemplate(country: typeof selected): string {
+    const need = primaryNeedLabel(country.primaryNeed);
+    const msg0 = (country.messaging as string[] | undefined)?.[0] || "";
+    const hook = (country.monthlyHooks as string[] | undefined)?.[0] || "";
+    return `Sayın ${country.president || "Sayın Başkan"},\n\n${country.name || country.countryName} ile ${need} konusunda iş birliği geliştirmek istiyoruz.\n\n${msg0}${hook ? "\n\n" + hook : ""}\n\nSaygılarımla,\nSuat Çelen\nFIG Adayı`;
+  }
+
   // Roadmap for selected country
   const roadmap = useMemo(() =>
     buildCountryRoadmap({
@@ -975,6 +1055,114 @@ const AppMain = () => {
         {/* ══ DURUM PANELİ ══ */}
         {view === "dashboard" && (
           <div className="tab-scroll">
+            {/* Kongre Geri Sayım */}
+            <div className="congress-card">
+              <div style={{ display:"flex", alignItems:"baseline", gap:8 }}>
+                <span style={{ fontSize:48, fontWeight:800, color:"var(--accent)", lineHeight:1 }}>{getDaysToCongressFn()}</span>
+                <span style={{ fontSize:16, fontWeight:600, color:"var(--muted)" }}>gün kaldı</span>
+              </div>
+              <div style={{ fontSize:13, fontWeight:600, color:"var(--text)", marginTop:4 }}>⏱ FIG Kongresi · Ekim 2026</div>
+              <div style={{ marginTop:14, borderTop:"1px solid var(--border)", paddingTop:12 }}>
+                <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginBottom:8, letterSpacing:"0.05em" }}>KRİTİK TARİHLER</div>
+                {KEY_EVENTS.map(ev => (
+                  <div key={ev.date} className="key-date-row">
+                    <span style={{ fontSize:11, color:"var(--muted)", minWidth:72 }}>{ev.date.slice(5).replace("-",".")}</span>
+                    <span style={{ fontSize:12, color:"var(--text)", flex:1 }}>{ev.label}</span>
+                    {ev.countries.length > 0 && (
+                      <span style={{ fontSize:10, color:"var(--accent)", fontWeight:600 }}>{ev.countries.length} ülke</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Trend Bu Ay */}
+            <div className="trend-row">
+              <span style={{ fontSize:13 }}>📈 Bu Ay</span>
+              <span style={{ color:"#4ade80", fontWeight:700 }}>+{trendThisMonth.gained} kazanıldı</span>
+              {trendThisMonth.lost > 0 && <span style={{ color:"#f87171", fontWeight:700 }}>−{trendThisMonth.lost} kaybedildi</span>}
+            </div>
+
+            {/* Rakip Analizi */}
+            <div className="competitor-card">
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
+                <span style={{ fontSize:13, fontWeight:700, color:"var(--text)" }}>⚔️ Rakip Durumu</span>
+                <button type="button" className="edit-btn" onClick={() => {
+                  setCompetitorDraft({
+                    name: competitor?.name || "",
+                    knownSupporters: competitor?.knownSupporters?.join(", ") || "",
+                    estimatedVotes: competitor?.estimatedVotes || 0
+                  });
+                  setEditingCompetitor(true);
+                }}><IcEdit /></button>
+              </div>
+              {editingCompetitor ? (
+                <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                  <input
+                    placeholder="Rakip adı"
+                    value={competitorDraft.name}
+                    onChange={e => setCompetitorDraft(p => ({...p, name: e.target.value}))}
+                    style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:6, padding:"6px 8px", color:"var(--text)", fontSize:12 }}
+                  />
+                  <input
+                    placeholder="Destekçi ülke kodları (virgülle: USA, GBR, FRA)"
+                    value={competitorDraft.knownSupporters}
+                    onChange={e => setCompetitorDraft(p => ({...p, knownSupporters: e.target.value}))}
+                    style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:6, padding:"6px 8px", color:"var(--text)", fontSize:12 }}
+                  />
+                  <input
+                    type="number"
+                    placeholder="Tahmini oy sayısı"
+                    value={competitorDraft.estimatedVotes}
+                    onChange={e => setCompetitorDraft(p => ({...p, estimatedVotes: Number(e.target.value)}))}
+                    style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:6, padding:"6px 8px", color:"var(--text)", fontSize:12 }}
+                  />
+                  <div style={{ display:"flex", gap:8 }}>
+                    <button type="button" onClick={() => {
+                      const data = {
+                        name: competitorDraft.name,
+                        knownSupporters: competitorDraft.knownSupporters.split(",").map(s=>s.trim()).filter(Boolean),
+                        estimatedVotes: competitorDraft.estimatedVotes
+                      };
+                      set(ref(db, "fig-v3/competitor"), data);
+                      setEditingCompetitor(false);
+                    }} style={{ flex:1, background:"var(--accent)", color:"#fff", border:"none", borderRadius:6, padding:"6px 8px", fontSize:12, fontWeight:600, cursor:"pointer" }}>Kaydet</button>
+                    <button type="button" onClick={() => setEditingCompetitor(false)} style={{ flex:1, background:"var(--surface2)", color:"var(--muted)", border:"1px solid var(--border)", borderRadius:6, padding:"6px 8px", fontSize:12, cursor:"pointer" }}>İptal</button>
+                  </div>
+                </div>
+              ) : competitor ? (
+                <div>
+                  <div style={{ fontSize:16, fontWeight:700, color:"var(--text)", marginBottom:6 }}>{competitor.name}</div>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:10 }}>
+                    <div style={{ background:"var(--surface2)", borderRadius:6, padding:"8px 10px", textAlign:"center" }}>
+                      <div style={{ fontSize:11, color:"var(--muted)" }}>Suat Çelen</div>
+                      <div style={{ fontSize:24, fontWeight:800, color:"#4ade80" }}>
+                        {Object.values(overrides).filter((o:any) => ["confirmed","leaning"].includes((o as CountryOverride & {status:string}).status)).length + mergedSeed.filter(f => !overrides[f.countryCode] && ["confirmed","leaning"].includes(f.status)).length}
+                      </div>
+                      <div style={{ fontSize:10, color:"var(--muted)" }}>tahmini oy</div>
+                    </div>
+                    <div style={{ background:"var(--surface2)", borderRadius:6, padding:"8px 10px", textAlign:"center" }}>
+                      <div style={{ fontSize:11, color:"var(--muted)" }}>{competitor.name}</div>
+                      <div style={{ fontSize:24, fontWeight:800, color:"#f87171" }}>{competitor.estimatedVotes}</div>
+                      <div style={{ fontSize:10, color:"var(--muted)" }}>tahmini oy</div>
+                    </div>
+                  </div>
+                  {competitor.knownSupporters.length > 0 && (
+                    <div>
+                      <div style={{ fontSize:10, fontWeight:700, color:"var(--muted)", marginBottom:4 }}>BİLİNEN DESTEKÇİLER</div>
+                      <div style={{ display:"flex", flexWrap:"wrap", gap:4 }}>
+                        {competitor.knownSupporters.map(c => (
+                          <span key={c} style={{ fontSize:10, background:"rgba(248,113,113,0.15)", color:"#f87171", borderRadius:4, padding:"2px 6px" }}>{c}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p style={{ fontSize:12, color:"var(--muted)", margin:0 }}>Rakip bilgisi girilmedi. Düzenle butonuna tıklayın.</p>
+              )}
+            </div>
+
             <section className="section">
               <h2 className="section-title">{t(lang,"vote_title")}</h2>
               <div className="vote-progress-card">
@@ -1537,6 +1725,14 @@ const AppMain = () => {
               <div className="ds-meta" style={{ opacity: 0.6, fontSize: 11 }}>{continentMeta[selected.continent]?.label} · {selected.federationName}</div>
             </div>
             <div style={{ display:"flex", alignItems:"center", gap:"10px", flexShrink:0 }}>
+              <button
+                type="button"
+                className="ds-print-btn"
+                onClick={() => window.print()}
+                title="Brifing Notu Yazdır"
+              >
+                🖨️ Yazdır
+              </button>
               <button type="button" className="sheet-x" onClick={() => setSheet(null)}><IcX /></button>
             </div>
           </div>
@@ -1740,12 +1936,98 @@ const AppMain = () => {
                     ))}
                   </div>
                 </div>
+
+                {/* Status History */}
+                {statusHistory[selected?.countryCode]?.length > 0 && (
+                  <div style={{ marginTop:16, background:"var(--surface2,#1a2533)", borderRadius:8, padding:"10px 12px" }}>
+                    <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginBottom:8, letterSpacing:"0.05em" }}>DURUM GEÇMİŞİ</div>
+                    {statusHistory[selected.countryCode].slice().reverse().map((h, i) => (
+                      <div key={i} className="status-history-row">
+                        <span style={{ fontSize:11, color:"var(--muted)" }}>{h.date}</span>
+                        <span style={{ fontSize:11, color:"var(--text)" }}>{h.from} → {h.to}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Country Dashboard Metrics */}
+                {(() => {
+                  const metrics = buildCountryDashboard(selected);
+                  return metrics.length > 0 ? (
+                    <div style={{ marginTop:16 }}>
+                      <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginBottom:8, letterSpacing:"0.05em" }}>STRATEJİK METRİKLER</div>
+                      <div className="country-dashboard-grid">
+                        {metrics.map((m, i) => (
+                          <div key={i} className="country-metric-card">
+                            <div style={{ fontSize:11, color:"var(--muted)", marginTop:2 }}>{m.label}</div>
+                            <div style={{ fontSize:16, fontWeight:700, color:"var(--accent)" }}>{m.score}</div>
+                            <div style={{ fontSize:10, color:"var(--text)", marginTop:2 }}>{m.value}</div>
+                            <div style={{ marginTop:4, height:3, borderRadius:2, background:"var(--border)" }}>
+                              <div style={{ width:`${m.score}%`, height:"100%", background:"var(--accent)", borderRadius:2 }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null;
+                })()}
+
+                {/* Facility Narrative */}
+                {(() => {
+                  const narrative = buildFacilityNarrative(selected);
+                  return narrative ? (
+                    <div style={{ marginTop:12, padding:"8px 12px", background:"var(--surface2,#1a2533)", borderRadius:8 }}>
+                      <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginBottom:4, letterSpacing:"0.05em" }}>TESİS & ORGANİZASYON</div>
+                      <p style={{ fontSize:12, color:"var(--text)", margin:0, lineHeight:1.6 }}>{narrative}</p>
+                    </div>
+                  ) : null;
+                })()}
+
+                {/* Role Digest */}
+                {(() => {
+                  const roles = buildRoleDigest(selected);
+                  return roles.length > 0 ? (
+                    <div style={{ marginTop:12 }}>
+                      <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginBottom:8, letterSpacing:"0.05em" }}>FIG ROLLERİ</div>
+                      {roles.map((r, i) => (
+                        <div key={i} className="role-digest-row">
+                          <div style={{ fontWeight:600, fontSize:12, color:"var(--accent)" }}>{r.title}</div>
+                          <div style={{ fontSize:11, color:"var(--text)", marginTop:2 }}>{r.body}</div>
+                          {r.meta && <div style={{ fontSize:10, color:"var(--muted)", marginTop:1 }}>{r.meta}</div>}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null;
+                })()}
               </>
             )}
 
             {/* ── MESAJ REHBERİ ── */}
             {dossierTab === "mesaj" && (
               <>
+                {/* WhatsApp Şablon */}
+                <div style={{ background:"#1a2d1a", border:"1px solid #2d5a2d", borderRadius:10, padding:"12px 14px", marginBottom:16 }}>
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
+                    <span style={{ fontSize:13, fontWeight:700, color:"#4ade80" }}>📋 WhatsApp Taslağı</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const text = buildWhatsAppTemplate(selected);
+                        navigator.clipboard.writeText(text).then(() => {
+                          setMsgCopied(true);
+                          setTimeout(() => setMsgCopied(false), 2500);
+                        });
+                      }}
+                      style={{ background: msgCopied ? "#166534" : "#15803d", color:"#fff", border:"none", borderRadius:6, padding:"4px 12px", fontSize:12, fontWeight:600, cursor:"pointer" }}
+                    >
+                      {msgCopied ? "✓ Kopyalandı!" : "📋 Kopyala"}
+                    </button>
+                  </div>
+                  <pre style={{ fontSize:11, color:"#86efac", margin:0, whiteSpace:"pre-wrap", lineHeight:1.6, fontFamily:"inherit" }}>
+                    {buildWhatsAppTemplate(selected)}
+                  </pre>
+                </div>
+
                 {/* Ana Mesajlar */}
                 <div className="ds-block">
                   <div className="ds-block-label-row">
@@ -2110,6 +2392,16 @@ const AppMain = () => {
               }
               return (
                 <>
+                  {/* Athlete Narrative */}
+                  {(() => {
+                    const narrative = buildAthleteNarrative(selected);
+                    return narrative ? (
+                      <div style={{ marginBottom:16, padding:"8px 12px", background:"var(--surface2,#1a2533)", borderRadius:8 }}>
+                        <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginBottom:4, letterSpacing:"0.05em" }}>SPORCU KAPASİTESİ</div>
+                        <p style={{ fontSize:12, color:"var(--text)", margin:0, lineHeight:1.6 }}>{narrative}</p>
+                      </div>
+                    ) : null;
+                  })()}
                   {disciplines.map(disc => {
                     const discInfo = DISCIPLINE_TR[disc];
                     const highlights = getHighlightsForDiscipline(selected, disc);

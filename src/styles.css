@@ -2013,3 +2013,116 @@ a { color: inherit; text-decoration: none; }
   border-color: var(--blue);
   color: var(--blue);
 }
+
+/* ── Congress Countdown ── */
+.congress-card {
+  background: linear-gradient(135deg, #0f1f0f 0%, #1a2a1a 100%);
+  border: 1px solid #2d5a2d;
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-bottom: 16px;
+}
+.key-date-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+.key-date-row:last-child { border-bottom: none; }
+
+/* ── Trend / Status History ── */
+.trend-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--surface2, #1a2533);
+  border-radius: 8px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+.status-history-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+}
+.status-history-row:last-child { border-bottom: none; }
+
+/* ── Country Dashboard Metrics ── */
+.country-dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 8px;
+}
+.country-metric-card {
+  background: var(--surface2, #1a2533);
+  border-radius: 8px;
+  padding: 10px 8px;
+  text-align: center;
+  border: 1px solid var(--border);
+}
+
+/* ── Role Digest ── */
+.role-digest-row {
+  padding: 8px 10px;
+  background: var(--surface2, #1a2533);
+  border-radius: 6px;
+  margin-bottom: 6px;
+}
+
+/* ── Competitor Card ── */
+.competitor-card {
+  background: var(--surface, #0f1621);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+
+/* ── Print Button ── */
+.ds-print-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.ds-print-btn:hover { background: var(--surface2); color: var(--text); }
+
+/* ── Print Media ── */
+@media print {
+  .sidebar, .nav-tabs, .hdr-tabs, .hdr-nav, .app-header,
+  .ds-print-btn, .edit-btn, .ds-tab-btn, .dossier-close-btn {
+    display: none !important;
+  }
+  .dossier-panel {
+    position: static !important;
+    width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+  .ds-scroll { overflow: visible !important; max-height: none !important; }
+  body { background: white !important; color: black !important; }
+}
+
+/* ── Tablet (481px – 767px) ── */
+@media (min-width: 481px) and (max-width: 767px) {
+  .app-shell { flex-direction: column; }
+  .sidebar { width: 100%; max-height: 280px; overflow-y: auto; }
+  .main-content { padding: 12px; }
+  .dossier-panel { width: 85%; max-width: 580px; }
+  .country-card { padding: 8px 10px; }
+  .hdr-tab { padding: 6px 10px; font-size: 12px; }
+  .ds-tab-btn { padding: 6px 10px; font-size: 12px; min-height: 44px; }
+  .country-dashboard-grid { grid-template-columns: repeat(2, 1fr); }
+  .congress-card { padding: 14px 16px; }
+}

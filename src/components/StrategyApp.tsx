@@ -399,6 +399,10 @@ const CODE_TO_NUMERIC: Record<string, string> = {
   // Küçük bölgeler / özel durumlar
   ARU:"533",CAY:"136",ISV:"850",GUM:"316",ASA:"016",BER:"060",BAH:"044",
   COK:"184",
+  // Eksik federasyonlar (önceden siyah görünüyordu)
+  AFG:"004", ALB:"008", AND:"020", CHA:"148",
+  LBN:"422", // Lübnan (LIB IOC kodu da var, ikisi de aynı ülke)
+  TTO:"780", // Trinidad ve Tobago (TRI IOC kodu da var)
 };
 
 // ── Editable text block ─────────────────────────────────────────────────

@@ -608,6 +608,8 @@ const AppMain = () => {
 
   // Feature: Risk Register
   const [risks, setRisks] = useState<Record<string, any[]>>({});
+  // Local draft to debounce per-keystroke Firebase writes on risk note textarea
+  const [riskNoteDraft, setRiskNoteDraft] = useState<{riskId: string; note: string} | null>(null);
 
   // Feature: Simulator 2.0
   const [continentSliders, setContinentSliders] = useState<Record<string,number>>({EG:0,AGU:0,UAG:0,PAGU:0,OGU:0});
@@ -726,6 +728,11 @@ const AppMain = () => {
     return calUnsub;
   }, []);
 
+  // Filtre değişince city sayfalamayı sıfırla
+  useEffect(() => {
+    setCityPage(1);
+  }, [cityFilter, citySearch, cityPageSize]);
+
   // Harita dışına çıkınca mapPreview sıfırla
   useEffect(() => {
     if (view !== "map") setMapPreview(null);
@@ -757,11 +764,8 @@ const AppMain = () => {
       const existing = mergedByCode[code];
       const oldStatus = overrides[code]?.status ?? existing?.status ?? "unknown";
       if (oldStatus !== patch.status) {
-        const histRef = ref(db, `fig-v3/statusHistory/${code}`);
-        onValue(histRef, currentSnap => {
-          const currentHistory: {from:string,to:string,date:string}[] = currentSnap.val() || [];
-          set(histRef, [...currentHistory, { from: oldStatus, to: patch.status as string, date: new Date().toISOString().slice(0,10) }]);
-        }, { onlyOnce: true });
+        const currentHistory = statusHistory[code] || [];
+        set(ref(db, `fig-v3/statusHistory/${code}`), [...currentHistory, { from: oldStatus, to: patch.status as string, date: new Date().toISOString().slice(0,10) }]);
       }
     }
   };
@@ -1277,11 +1281,11 @@ const AppMain = () => {
 
                 {/* FEATURE 2: Gerçek Oy Tahmini */}
                 {(() => {
-                  const realVotes = Object.entries(overrides).filter(([code, o]: any) => {
-                    const lvl = o.commitmentLevel ?? 1;
-                    const att = o.congressAttendance ?? "unknown";
-                    const isSupporter = o.status === "supporter" ||
-                      (!o.status && federationSeeds.find((f:any) => f.countryCode === code)?.status === "supporter");
+                  const realVotes = mergedSeed.filter((f: any) => {
+                    const ov = overrides[f.countryCode] || {};
+                    const lvl = ov.commitmentLevel ?? 1;
+                    const att = ov.congressAttendance ?? "unknown";
+                    const isSupporter = f.status === "supporter";
                     return isSupporter && lvl >= 4 && ["confirmed","likely"].includes(att);
                   }).length;
                   return (
@@ -2153,35 +2157,43 @@ const AppMain = () => {
           const sortedEvents = [...events].sort((a,b) => a.date.localeCompare(b.date));
           const allFeds = federationSeeds.map((f:any) => ({...f, ...(overrides[f.countryCode]||{})}));
 
-          // CRUD helpers
-          const saveEvents = (next: CalEvent[]) => {
+          // CRUD helpers — per-event keyed writes (no map-wide clobber)
+          const saveEvent = (e: CalEvent) => {
+            set(ref(db, `fig-v3/calendarEvents/${e.id}`), e);
+          };
+          const removeEvent = (id: string) => {
+            remove(ref(db, `fig-v3/calendarEvents/${id}`));
+          };
+          const seedEvents = (defaultEvents: CalEvent[]) => {
             const obj: Record<string, CalEvent> = {};
-            next.forEach(e => { obj[e.id] = e; });
+            defaultEvents.forEach(e => { obj[e.id] = e; });
             set(ref(db, "fig-v3/calendarEvents"), obj);
           };
           const addEvent = () => {
             const newId = `e_${Date.now()}`;
             const newEvent: CalEvent = { id:newId, date:new Date().toISOString().slice(0,10), label:lang==="tr"?"Yeni Etkinlik":"New Event", emoji:"📅", countries:[], note:"" };
-            saveEvents([...events, newEvent]);
+            saveEvent(newEvent);
             setCalEditingId(newId);
             setCalDraft(newEvent);
           };
           const seedDefaults = () => {
-            saveEvents(DEFAULT_EVENTS);
+            seedEvents(DEFAULT_EVENTS);
           };
           const deleteEvent = (id: string) => {
             if (!confirm(lang === "tr" ? "Bu etkinliği silmek istediğine emin misin?" : "Are you sure you want to delete this event?")) return;
-            saveEvents(events.filter(e => e.id !== id));
+            removeEvent(id);
           };
           const updateEvent = (id: string, patch: Partial<CalEvent>) => {
-            saveEvents(events.map(e => e.id === id ? {...e, ...patch} : e));
+            const ev = events.find(e => e.id === id);
+            if (!ev) return;
+            saveEvent({ ...ev, ...patch });
           };
           const toggleCountry = (eventId: string, code: string) => {
             const ev = events.find(e => e.id === eventId);
             if (!ev) return;
             const has = ev.countries.includes(code);
             const newCountries = has ? ev.countries.filter(c => c !== code) : [...ev.countries, code];
-            updateEvent(eventId, { countries: newCountries });
+            saveEvent({ ...ev, countries: newCountries });
           };
 
           return (
@@ -3359,7 +3371,7 @@ const AppMain = () => {
                         <button
                           key={level}
                           type="button"
-                          onClick={() => setOverride(selected.countryCode, { commitmentLevel: level } as any)}
+                          onClick={() => setOverride(selected.countryCode, { commitmentLevel: level })}
                           style={{
                             background: current === level ? color : "var(--surface2)",
                             border: `2px solid ${current === level ? color : "var(--border)"}`,
@@ -3395,7 +3407,7 @@ const AppMain = () => {
                         <button
                           key={val}
                           type="button"
-                          onClick={() => setOverride(selected.countryCode, { congressAttendance: val } as any)}
+                          onClick={() => setOverride(selected.countryCode, { congressAttendance: val })}
                           style={{
                             background: current === val ? color : "var(--surface2)",
                             border:`2px solid ${current === val ? color : "var(--border)"}`,
@@ -3413,7 +3425,7 @@ const AppMain = () => {
                     <input
                       placeholder={t(lang,"attendance_note_ph")}
                       value={(overrides[selected.countryCode]?.attendanceNote as string|undefined) ?? ""}
-                      onChange={e => setOverride(selected.countryCode, { attendanceNote: e.target.value } as any)}
+                      onChange={e => setOverride(selected.countryCode, { attendanceNote: e.target.value })}
                       style={{ width:"100%", background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:6, padding:"6px 8px", color:"var(--text)", fontSize:12, boxSizing:"border-box" }}
                     />
                   </div>
@@ -3793,11 +3805,16 @@ const AppMain = () => {
                             }} style={{ background:"transparent", border:"none", cursor:"pointer", fontSize:12, color:"var(--muted)" }}>✕</button>
                           </div>
                           <textarea
-                            value={r.note}
-                            onChange={e => {
-                              const updated = [...(risks[selected.countryCode] || [])];
-                              updated[i] = {...r, note: e.target.value};
-                              set(ref(db, `fig-v3/risks/${selected.countryCode}`), updated);
+                            value={riskNoteDraft?.riskId === `${selected.countryCode}-${i}` ? riskNoteDraft.note : r.note}
+                            onFocus={() => setRiskNoteDraft({riskId: `${selected.countryCode}-${i}`, note: r.note})}
+                            onChange={e => setRiskNoteDraft({riskId: `${selected.countryCode}-${i}`, note: e.target.value})}
+                            onBlur={() => {
+                              if (riskNoteDraft && riskNoteDraft.riskId === `${selected.countryCode}-${i}`) {
+                                const updated = [...(risks[selected.countryCode] || [])];
+                                updated[i] = {...r, note: riskNoteDraft.note};
+                                set(ref(db, `fig-v3/risks/${selected.countryCode}`), updated);
+                                setRiskNoteDraft(null);
+                              }
                             }}
                             placeholder={t(lang,"risk_description_ph")}
                             rows={2}

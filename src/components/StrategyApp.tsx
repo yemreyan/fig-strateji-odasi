@@ -1048,7 +1048,7 @@ const AppMain = () => {
         </div>
         <nav className="hdr-nav">
           {(["dashboard","savaş-odası","map","countries","vaatler","notes","takvim","kongre-şehri"] as AppView[]).map(v => {
-            const labels: Record<AppView,string> = { dashboard:t(lang,"nav_dashboard"), map:t(lang,"nav_map"), countries:t(lang,"nav_countries"), vaatler:t(lang,"nav_promises"), notes:t(lang,"nav_notes"), "savaş-odası":"⚔️ Savaş Odası", takvim:"📅 Takvim", "kongre-şehri":"🏛️ Kongre Şehri" };
+            const labels: Record<AppView,string> = { dashboard:t(lang,"nav_dashboard"), map:t(lang,"nav_map"), countries:t(lang,"nav_countries"), vaatler:t(lang,"nav_promises"), notes:t(lang,"nav_notes"), "savaş-odası":t(lang,"nav_war_room"), takvim:t(lang,"nav_calendar"), "kongre-şehri":t(lang,"nav_congress_city") };
             const icons: Record<AppView, React.ReactElement> = { dashboard:<IcGrid/>, map:<IcMap/>, countries:<IcGlobe/>, vaatler:<IcHandshake/>, notes:<IcNote/>, "savaş-odası":<IcGrid/>, takvim:<IcNote/>, "kongre-şehri":<IcGlobe/> };
             return (
               <button key={v} className={`hdr-tab ${view===v?"active":""}`} onClick={() => setView(v)} type="button">
@@ -1070,7 +1070,7 @@ const AppMain = () => {
       {/* ── Bottom Nav ── */}
       <nav className="bottom-nav">
         {(["dashboard","savaş-odası","map","countries","vaatler","notes","takvim","kongre-şehri"] as AppView[]).map(v => {
-          const labels: Record<AppView,string> = { dashboard:t(lang,"nav_dashboard"), map:t(lang,"nav_map"), countries:t(lang,"nav_countries"), vaatler:t(lang,"nav_promises"), notes:t(lang,"nav_notes"), "savaş-odası":"⚔️ Savaş", takvim:"📅 Takvim", "kongre-şehri":"🏛️ Şehir" };
+          const labels: Record<AppView,string> = { dashboard:t(lang,"nav_dashboard"), map:t(lang,"nav_map"), countries:t(lang,"nav_countries"), vaatler:t(lang,"nav_promises"), notes:t(lang,"nav_notes"), "savaş-odası":t(lang,"nav_war_room_short"), takvim:t(lang,"nav_calendar"), "kongre-şehri":t(lang,"nav_congress_city_short") };
           const icons: Record<AppView, React.ReactElement> = { dashboard:<IcGrid/>, map:<IcMap/>, countries:<IcGlobe/>, vaatler:<IcHandshake/>, notes:<IcNote/>, "savaş-odası":<IcGrid/>, takvim:<IcNote/>, "kongre-şehri":<IcGlobe/> };
           return (
             <button key={v} type="button" className={`nav-tab ${view===v?"active":""}`} onClick={() => { setView(v); setSheet(null); }}>
@@ -1089,9 +1089,9 @@ const AppMain = () => {
             <div className="congress-card">
               <div style={{ display:"flex", alignItems:"baseline", gap:8 }}>
                 <span style={{ fontSize:48, fontWeight:800, color:"var(--accent)", lineHeight:1 }}>{getDaysToCongressFn()}</span>
-                <span style={{ fontSize:16, fontWeight:600, color:"var(--muted)" }}>gün kaldı</span>
+                <span style={{ fontSize:16, fontWeight:600, color:"var(--muted)" }}>{t(lang,"days_left")}</span>
               </div>
-              <div style={{ fontSize:13, fontWeight:600, color:"var(--text)", marginTop:4 }}>⏱ FIG Kongresi · Ekim 2026</div>
+              <div style={{ fontSize:13, fontWeight:600, color:"var(--text)", marginTop:4 }}>{t(lang,"fig_congress_oct_2026")}</div>
 
               {/* Kongre Şehri Mini Özet */}
               {(() => {
@@ -1103,8 +1103,8 @@ const AppMain = () => {
                 return (
                   <div onClick={() => setView("kongre-şehri")} style={{ marginTop:12, padding:"10px 12px", background:"var(--surface2)", borderRadius:8, cursor:"pointer" }}>
                     <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
-                      <span style={{ fontSize:11, fontWeight:700, color:"var(--muted)", letterSpacing:"0.05em" }}>🏛️ KONGRE ŞEHRİ</span>
-                      <span style={{ fontSize:11, color:"var(--accent)" }}>Detay →</span>
+                      <span style={{ fontSize:11, fontWeight:700, color:"var(--muted)", letterSpacing:"0.05em" }}>{t(lang,"host_city_mini")}</span>
+                      <span style={{ fontSize:11, color:"var(--accent)" }}>{t(lang,"detail_arrow")}</span>
                     </div>
                     <div style={{ display:"flex", height:10, borderRadius:5, overflow:"hidden", background:"var(--border)", marginBottom:5 }}>
                       <div style={{ width:`${iPct}%`, background:"#0ea5e9" }} />
@@ -1119,13 +1119,13 @@ const AppMain = () => {
               })()}
 
               <div style={{ marginTop:14, borderTop:"1px solid var(--border)", paddingTop:12 }}>
-                <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginBottom:8, letterSpacing:"0.05em" }}>KRİTİK TARİHLER</div>
+                <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginBottom:8, letterSpacing:"0.05em" }}>{t(lang,"critical_dates")}</div>
                 {KEY_EVENTS.map(ev => (
                   <div key={ev.date} className="key-date-row">
                     <span style={{ fontSize:11, color:"var(--muted)", minWidth:72 }}>{ev.date.slice(5).replace("-",".")}</span>
                     <span style={{ fontSize:12, color:"var(--text)", flex:1 }}>{ev.label}</span>
                     {ev.countries.length > 0 && (
-                      <span style={{ fontSize:10, color:"var(--accent)", fontWeight:600 }}>{ev.countries.length} ülke</span>
+                      <span style={{ fontSize:10, color:"var(--accent)", fontWeight:600 }}>{ev.countries.length} {t(lang,"country_count_suffix")}</span>
                     )}
                   </div>
                 ))}
@@ -1134,15 +1134,15 @@ const AppMain = () => {
 
             {/* Trend Bu Ay */}
             <div className="trend-row">
-              <span style={{ fontSize:13 }}>📈 Bu Ay</span>
-              <span style={{ color:"#4ade80", fontWeight:700 }}>+{trendThisMonth.gained} kazanıldı</span>
-              {trendThisMonth.lost > 0 && <span style={{ color:"#f87171", fontWeight:700 }}>−{trendThisMonth.lost} kaybedildi</span>}
+              <span style={{ fontSize:13 }}>{t(lang,"trend_this_month")}</span>
+              <span style={{ color:"#4ade80", fontWeight:700 }}>+{trendThisMonth.gained} {t(lang,"gained_suffix")}</span>
+              {trendThisMonth.lost > 0 && <span style={{ color:"#f87171", fontWeight:700 }}>−{trendThisMonth.lost} {t(lang,"lost_suffix")}</span>}
             </div>
 
             {/* Rakip Analizi */}
             <div className="competitor-card">
               <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
-                <span style={{ fontSize:13, fontWeight:700, color:"var(--text)" }}>⚔️ Rakip Durumu</span>
+                <span style={{ fontSize:13, fontWeight:700, color:"var(--text)" }}>{t(lang,"competitor_status")}</span>
                 <button type="button" className="edit-btn" onClick={() => {
                   setCompetitorDraft({
                     name: competitor?.name || "",
@@ -1155,20 +1155,20 @@ const AppMain = () => {
               {editingCompetitor ? (
                 <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
                   <input
-                    placeholder="Rakip adı"
+                    placeholder={t(lang,"competitor_name_ph")}
                     value={competitorDraft.name}
                     onChange={e => setCompetitorDraft(p => ({...p, name: e.target.value}))}
                     style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:6, padding:"6px 8px", color:"var(--text)", fontSize:12 }}
                   />
                   <input
-                    placeholder="Destekçi ülke kodları (virgülle: USA, GBR, FRA)"
+                    placeholder={t(lang,"competitor_supporters_ph")}
                     value={competitorDraft.knownSupporters}
                     onChange={e => setCompetitorDraft(p => ({...p, knownSupporters: e.target.value}))}
                     style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:6, padding:"6px 8px", color:"var(--text)", fontSize:12 }}
                   />
                   <input
                     type="number"
-                    placeholder="Tahmini oy sayısı"
+                    placeholder={t(lang,"competitor_votes_ph")}
                     value={competitorDraft.estimatedVotes}
                     onChange={e => setCompetitorDraft(p => ({...p, estimatedVotes: Number(e.target.value)}))}
                     style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:6, padding:"6px 8px", color:"var(--text)", fontSize:12 }}
@@ -1182,8 +1182,8 @@ const AppMain = () => {
                       };
                       set(ref(db, "fig-v3/competitor"), data);
                       setEditingCompetitor(false);
-                    }} style={{ flex:1, background:"var(--accent)", color:"#fff", border:"none", borderRadius:6, padding:"6px 8px", fontSize:12, fontWeight:600, cursor:"pointer" }}>Kaydet</button>
-                    <button type="button" onClick={() => setEditingCompetitor(false)} style={{ flex:1, background:"var(--surface2)", color:"var(--muted)", border:"1px solid var(--border)", borderRadius:6, padding:"6px 8px", fontSize:12, cursor:"pointer" }}>İptal</button>
+                    }} style={{ flex:1, background:"var(--accent)", color:"#fff", border:"none", borderRadius:6, padding:"6px 8px", fontSize:12, fontWeight:600, cursor:"pointer" }}>{t(lang,"save")}</button>
+                    <button type="button" onClick={() => setEditingCompetitor(false)} style={{ flex:1, background:"var(--surface2)", color:"var(--muted)", border:"1px solid var(--border)", borderRadius:6, padding:"6px 8px", fontSize:12, cursor:"pointer" }}>{t(lang,"cancel")}</button>
                   </div>
                 </div>
               ) : competitor ? (
@@ -1191,21 +1191,21 @@ const AppMain = () => {
                   <div style={{ fontSize:16, fontWeight:700, color:"var(--text)", marginBottom:6 }}>{competitor.name}</div>
                   <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:10 }}>
                     <div style={{ background:"var(--surface2)", borderRadius:6, padding:"8px 10px", textAlign:"center" }}>
-                      <div style={{ fontSize:11, color:"var(--muted)" }}>Suat Çelen</div>
+                      <div style={{ fontSize:11, color:"var(--muted)" }}>{t(lang,"suat_celen")}</div>
                       <div style={{ fontSize:24, fontWeight:800, color:"#4ade80" }}>
                         {Object.values(overrides).filter((o:any) => ["confirmed","leaning"].includes((o as CountryOverride & {status:string}).status)).length + mergedSeed.filter(f => !overrides[f.countryCode] && ["confirmed","leaning"].includes(f.status)).length}
                       </div>
-                      <div style={{ fontSize:10, color:"var(--muted)" }}>tahmini oy</div>
+                      <div style={{ fontSize:10, color:"var(--muted)" }}>{t(lang,"est_votes")}</div>
                     </div>
                     <div style={{ background:"var(--surface2)", borderRadius:6, padding:"8px 10px", textAlign:"center" }}>
                       <div style={{ fontSize:11, color:"var(--muted)" }}>{competitor.name}</div>
                       <div style={{ fontSize:24, fontWeight:800, color:"#f87171" }}>{competitor.estimatedVotes}</div>
-                      <div style={{ fontSize:10, color:"var(--muted)" }}>tahmini oy</div>
+                      <div style={{ fontSize:10, color:"var(--muted)" }}>{t(lang,"est_votes")}</div>
                     </div>
                   </div>
                   {competitor.knownSupporters.length > 0 && (
                     <div>
-                      <div style={{ fontSize:10, fontWeight:700, color:"var(--muted)", marginBottom:4 }}>BİLİNEN DESTEKÇİLER</div>
+                      <div style={{ fontSize:10, fontWeight:700, color:"var(--muted)", marginBottom:4 }}>{t(lang,"known_supporters")}</div>
                       <div style={{ display:"flex", flexWrap:"wrap", gap:4 }}>
                         {competitor.knownSupporters.map(c => (
                           <span key={c} style={{ fontSize:10, background:"rgba(248,113,113,0.15)", color:"#f87171", borderRadius:4, padding:"2px 6px" }}>{c}</span>
@@ -1215,7 +1215,7 @@ const AppMain = () => {
                   )}
                 </div>
               ) : (
-                <p style={{ fontSize:12, color:"var(--muted)", margin:0 }}>Rakip bilgisi girilmedi. Düzenle butonuna tıklayın.</p>
+                <p style={{ fontSize:12, color:"var(--muted)", margin:0 }}>{t(lang,"no_competitor_info")}</p>
               )}
             </div>
 
@@ -1244,8 +1244,8 @@ const AppMain = () => {
                   if (committed5 === 0) return null;
                   return (
                     <div style={{ display:"flex", gap:12, marginTop:8, flexWrap:"wrap" }}>
-                      <span style={{ fontSize:12, color:"#0d9488" }}>✅ Kesin taahhüt: <strong>{committed5}</strong></span>
-                      {committed6 > 0 && <span style={{ fontSize:12, color:"#7c3aed" }}>🏆 Yazılı taahhüt: <strong>{committed6}</strong></span>}
+                      <span style={{ fontSize:12, color:"#0d9488" }}>✅ {t(lang,"firm_commitment")}: <strong>{committed5}</strong></span>
+                      {committed6 > 0 && <span style={{ fontSize:12, color:"#7c3aed" }}>🏆 {t(lang,"written_commitment")}: <strong>{committed6}</strong></span>}
                     </div>
                   );
                 })()}
@@ -1261,7 +1261,7 @@ const AppMain = () => {
                   }).length;
                   return (
                     <div style={{ marginTop:6, padding:"8px 12px", background:"rgba(16,163,127,0.1)", border:"1px solid rgba(16,163,127,0.3)", borderRadius:8 }}>
-                      <span style={{ fontSize:11, color:"var(--muted)" }}>✈️ Gerçek oy tahmini (katılım × taahhüt): </span>
+                      <span style={{ fontSize:11, color:"var(--muted)" }}>{t(lang,"real_vote_estimate")}</span>
                       <strong style={{ fontSize:16, color:"#10a37f" }}>{realVotes}</strong>
                     </div>
                   );
@@ -1279,7 +1279,7 @@ const AppMain = () => {
               return (
                 <div className="section" style={{ paddingTop:0 }}>
                   <div style={{ background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.3)", borderRadius:10, padding:"10px 14px", marginBottom:12 }}>
-                    <span style={{ fontSize:12, color:"#f87171", fontWeight:700 }}>⚠️ {highRisks.length} destekçi ülkede çözülmemiş yüksek risk</span>
+                    <span style={{ fontSize:12, color:"#f87171", fontWeight:700 }}>⚠️ {highRisks.length} {t(lang,"risk_warning_dashboard")}</span>
                   </div>
                 </div>
               );
@@ -1302,7 +1302,7 @@ const AppMain = () => {
               return (
                 <section className="section">
                   <div style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, padding:"14px 16px", marginBottom:16 }}>
-                    <div style={{ fontSize:13, fontWeight:700, color:"var(--text)", marginBottom:12 }}>🚧 İtiraz Analizi</div>
+                    <div style={{ fontSize:13, fontWeight:700, color:"var(--text)", marginBottom:12 }}>{t(lang,"objection_analysis")}</div>
                     {sorted.map(([obj, count]) => (
                       <div key={obj} style={{ marginBottom:8 }}>
                         <div style={{ display:"flex", justifyContent:"space-between", marginBottom:3 }}>
@@ -1332,7 +1332,7 @@ const AppMain = () => {
               return (
                 <section className="section">
                   <div style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, padding:"14px 16px", marginBottom:16 }}>
-                    <div style={{ fontSize:13, fontWeight:700, color:"var(--text)", marginBottom:10 }}>📡 Etki Merkezleri</div>
+                    <div style={{ fontSize:13, fontWeight:700, color:"var(--text)", marginBottom:10 }}>{t(lang,"influence_centers")}</div>
                     {top5.map(([code, count]) => {
                       const fed = mergedByCode[code];
                       const eff = fed?.status;
@@ -1342,7 +1342,7 @@ const AppMain = () => {
                           <span style={{ width:8, height:8, borderRadius:"50%", background:statusColors[(eff ?? "")]||"var(--muted)", flexShrink:0 }} />
                           <span style={{ fontSize:12, fontWeight:700, color:"var(--accent)", minWidth:36 }}>{code}</span>
                           <span style={{ fontSize:12, color:"var(--text)", flex:1 }}>{fed ? trName(fed) : code}</span>
-                          <span style={{ fontSize:11, color:"#4ade80", fontWeight:600 }}>+{count} müttefik</span>
+                          <span style={{ fontSize:11, color:"#4ade80", fontWeight:600 }}>+{count} {t(lang,"allies_suffix")}</span>
                         </div>
                       );
                     })}
@@ -1437,7 +1437,7 @@ const AppMain = () => {
 
                 {/* FEATURE 8: Simülatör 2.0 — Kıta Bazlı */}
                 <div style={{ marginTop:12, paddingTop:12, borderTop:"1px solid var(--border)" }}>
-                  <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginBottom:10, letterSpacing:"0.05em" }}>KIITA BAZLI DÖNÜŞÜM</div>
+                  <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginBottom:10, letterSpacing:"0.05em" }}>{t(lang,"continent_based_conversion")}</div>
                   {[{code:"EG",label:"🇪🇺 Avrupa"},{code:"AGU",label:"🌏 Asya"},{code:"UAG",label:"🌍 Afrika"},{code:"PAGU",label:"🌎 Amerika"},{code:"OGU",label:"🌊 Okyanusya"}].map(({code, label}) => {
                     const targets = federationSeeds.filter((f:any) => f.continent === code && ["watch","persuadable"].includes(overrides[f.countryCode]?.status || f.status));
                     const val = continentSliders[code] || 0;
@@ -1446,7 +1446,7 @@ const AppMain = () => {
                       <div key={code} style={{ marginBottom:10 }}>
                         <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
                           <span style={{ fontSize:11, color:"var(--text)" }}>{label}</span>
-                          <span style={{ fontSize:11, color:"var(--accent)", fontWeight:600 }}>+{converted} / {targets.length} hedef</span>
+                          <span style={{ fontSize:11, color:"var(--accent)", fontWeight:600 }}>+{converted} / {targets.length} {t(lang,"targets_lbl")}</span>
                         </div>
                         <input
                           type="range" min={0} max={100} value={val}
@@ -1458,9 +1458,9 @@ const AppMain = () => {
                   })}
                   <div style={{ display:"flex", gap:6, marginTop:8 }}>
                     {[
-                      {label:"😰 En Kötü", vals:{EG:5,AGU:5,UAG:5,PAGU:5,OGU:5}},
-                      {label:"📊 Mevcut", vals:{EG:30,AGU:25,UAG:40,PAGU:35,OGU:50}},
-                      {label:"😊 Optimist", vals:{EG:60,AGU:50,UAG:70,PAGU:65,OGU:80}},
+                      {label:t(lang,"worst_case"), vals:{EG:5,AGU:5,UAG:5,PAGU:5,OGU:5}},
+                      {label:t(lang,"current_case"), vals:{EG:30,AGU:25,UAG:40,PAGU:35,OGU:50}},
+                      {label:t(lang,"optimistic_case"), vals:{EG:60,AGU:50,UAG:70,PAGU:65,OGU:80}},
                     ].map(preset => (
                       <button
                         key={preset.label}
@@ -1484,9 +1484,9 @@ const AppMain = () => {
                     return (
                       <div style={{ marginTop:10, padding:"10px 12px", background: total >= maj ? "rgba(16,163,127,0.12)" : "rgba(239,68,68,0.08)", border:`1px solid ${total >= maj ? "rgba(16,163,127,0.4)" : "rgba(239,68,68,0.3)"}`, borderRadius:8, textAlign:"center" }}>
                         <div style={{ fontSize:22, fontWeight:800, color: total >= maj ? "#10a37f" : "#f87171" }}>{total}</div>
-                        <div style={{ fontSize:11, color:"var(--muted)" }}>{scenarioName} senaryo · Çoğunluk: {maj}</div>
+                        <div style={{ fontSize:11, color:"var(--muted)" }}>{scenarioName} {t(lang,"scenario_lbl")} · {t(lang,"majority_lbl")}: {maj}</div>
                         <div style={{ fontSize:11, color: total >= maj ? "#4ade80" : "#f87171", fontWeight:600, marginTop:2 }}>
-                          {total >= maj ? `✅ +${total - maj} fazla` : `❌ ${maj - total} eksik`}
+                          {total >= maj ? `✅ +${total - maj} ${t(lang,"over")}` : `❌ ${maj - total} ${t(lang,"under")}`}
                         </div>
                       </div>
                     );
@@ -2004,30 +2004,30 @@ const AppMain = () => {
           return (
             <div className="tab-scroll">
               <div style={{ padding:"24px 20px", maxWidth:1100, margin:"0 auto" }}>
-                <h2 style={{ fontSize:22, fontWeight:800, color:"var(--text)", marginBottom:4 }}>⚔️ Savaş Odası</h2>
-                <p style={{ fontSize:13, color:"var(--muted)", marginBottom:24 }}>Bugün ne yapmalısın?</p>
+                <h2 style={{ fontSize:22, fontWeight:800, color:"var(--text)", marginBottom:4 }}>{t(lang,"war_room_title")}</h2>
+                <p style={{ fontSize:13, color:"var(--muted)", marginBottom:24 }}>{t(lang,"what_to_do_today")}</p>
                 <div className="war-room-grid">
                   <div>
                     {urgentPersuadable.length > 0 && (
                       <div style={{ background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.3)", borderRadius:12, padding:"16px", marginBottom:16 }}>
-                        <div style={{ fontSize:13, fontWeight:700, color:"#f87171", marginBottom:12 }}>🔴 Acil — İkna Edilebilir (7 gün temas yok)</div>
+                        <div style={{ fontSize:13, fontWeight:700, color:"#f87171", marginBottom:12 }}>{t(lang,"urgent_persuadable_title")}</div>
                         {urgentPersuadable.slice(0,8).map((f: any) => (
                           <div key={f.countryCode} onClick={() => openDossier(f.countryCode)} style={{ display:"flex", alignItems:"center", gap:10, padding:"6px 0", borderBottom:"1px solid rgba(239,68,68,0.15)", cursor:"pointer" }}>
                             <span style={{ fontSize:12, fontWeight:700, color:"var(--accent)", minWidth:36 }}>{f.countryCode}</span>
                             <span style={{ fontSize:12, color:"var(--text)", flex:1 }}>{trName(f)}</span>
-                            <span style={{ fontSize:10, color:"var(--muted)" }}>{lastContact[f.countryCode] ? lastContact[f.countryCode] : "Hiç temas yok"}</span>
+                            <span style={{ fontSize:10, color:"var(--muted)" }}>{lastContact[f.countryCode] ? lastContact[f.countryCode] : t(lang,"no_contact_yet")}</span>
                           </div>
                         ))}
                       </div>
                     )}
                     {warningWatch.length > 0 && (
                       <div style={{ background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.3)", borderRadius:12, padding:"16px", marginBottom:16 }}>
-                        <div style={{ fontSize:13, fontWeight:700, color:"#fbbf24", marginBottom:12 }}>🟡 Takipte — İzleme (14 gün temas yok)</div>
+                        <div style={{ fontSize:13, fontWeight:700, color:"#fbbf24", marginBottom:12 }}>{t(lang,"watch_followup_title")}</div>
                         {warningWatch.slice(0,6).map((f: any) => (
                           <div key={f.countryCode} onClick={() => openDossier(f.countryCode)} style={{ display:"flex", alignItems:"center", gap:10, padding:"6px 0", borderBottom:"1px solid rgba(245,158,11,0.15)", cursor:"pointer" }}>
                             <span style={{ fontSize:12, fontWeight:700, color:"var(--accent)", minWidth:36 }}>{f.countryCode}</span>
                             <span style={{ fontSize:12, color:"var(--text)", flex:1 }}>{trName(f)}</span>
-                            <span style={{ fontSize:10, color:"var(--muted)" }}>{lastContact[f.countryCode] || "Hiç temas yok"}</span>
+                            <span style={{ fontSize:10, color:"var(--muted)" }}>{lastContact[f.countryCode] || t(lang,"no_contact_yet")}</span>
                           </div>
                         ))}
                       </div>
@@ -2035,12 +2035,12 @@ const AppMain = () => {
                     {urgentPersuadable.length === 0 && warningWatch.length === 0 && (
                       <div style={{ background:"rgba(16,163,127,0.08)", border:"1px solid rgba(16,163,127,0.3)", borderRadius:12, padding:"24px 16px", textAlign:"center" }}>
                         <div style={{ fontSize:24, marginBottom:8 }}>✅</div>
-                        <div style={{ fontSize:13, color:"#10a37f", fontWeight:600 }}>Tüm hedef ülkelerle güncel temas var!</div>
+                        <div style={{ fontSize:13, color:"#10a37f", fontWeight:600 }}>{t(lang,"all_contacts_current")}</div>
                       </div>
                     )}
                     {nextSteps.length > 0 && (
                       <div style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, padding:"16px", marginTop:16 }}>
-                        <div style={{ fontSize:13, fontWeight:700, color:"var(--text)", marginBottom:12 }}>📋 Sonraki Adımlar</div>
+                        <div style={{ fontSize:13, fontWeight:700, color:"var(--text)", marginBottom:12 }}>{t(lang,"next_steps")}</div>
                         {nextSteps.slice(0,6).map((ns, i) => (
                           <div key={i} style={{ padding:"8px 0", borderBottom:"1px solid var(--border)" }}>
                             <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:3 }}>
@@ -2055,28 +2055,28 @@ const AppMain = () => {
                   </div>
                   <div>
                     <div style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, padding:"16px", marginBottom:16 }}>
-                      <div style={{ fontSize:13, fontWeight:700, color:"var(--text)", marginBottom:16 }}>📊 Temas Hızı</div>
+                      <div style={{ fontSize:13, fontWeight:700, color:"var(--text)", marginBottom:16 }}>{t(lang,"contact_velocity")}</div>
                       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:16 }}>
                         <div style={{ textAlign:"center", padding:"12px", background:"var(--surface2)", borderRadius:8 }}>
                           <div style={{ fontSize:28, fontWeight:800, color:"var(--accent)" }}>{thisWeekCount}</div>
-                          <div style={{ fontSize:11, color:"var(--muted)" }}>Bu hafta</div>
+                          <div style={{ fontSize:11, color:"var(--muted)" }}>{t(lang,"this_week")}</div>
                         </div>
                         <div style={{ textAlign:"center", padding:"12px", background:"var(--surface2)", borderRadius:8 }}>
                           <div style={{ fontSize:28, fontWeight:800, color:"var(--muted)" }}>{lastWeekCount}</div>
-                          <div style={{ fontSize:11, color:"var(--muted)" }}>Geçen hafta</div>
+                          <div style={{ fontSize:11, color:"var(--muted)" }}>{t(lang,"last_week")}</div>
                           {lastWeekCount > 0 && (
                             <div style={{ fontSize:10, color: thisWeekCount >= lastWeekCount ? "#4ade80" : "#f87171" }}>
-                              {thisWeekCount >= lastWeekCount ? "▲" : "▼"} {Math.abs(thisWeekCount - lastWeekCount)} fark
+                              {thisWeekCount >= lastWeekCount ? "▲" : "▼"} {Math.abs(thisWeekCount - lastWeekCount)} {t(lang,"difference")}
                             </div>
                           )}
                         </div>
                       </div>
                       {totalChannels > 0 && (
                         <div>
-                          <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginBottom:8 }}>KANAL DAĞILIMI (Bu Hafta)</div>
+                          <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginBottom:8 }}>{t(lang,"channel_distribution")}</div>
                           {Object.entries(channelCounts).filter(([,v]) => v > 0).map(([channel, count]) => (
                             <div key={channel} style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
-                              <span style={{ fontSize:11, color:"var(--muted)", minWidth:70 }}>{{desk:"🖥️ Masa",email:"📧 E-posta",call:"📞 Arama",visit:"🤝 Ziyaret"}[channel as "desk"|"email"|"call"|"visit"] || channel}</span>
+                              <span style={{ fontSize:11, color:"var(--muted)", minWidth:70 }}>{{desk:t(lang,"channel_desk"),email:t(lang,"channel_email"),call:t(lang,"channel_call"),visit:t(lang,"channel_visit")}[channel as "desk"|"email"|"call"|"visit"] || channel}</span>
                               <div style={{ flex:1, height:8, background:"var(--border)", borderRadius:4, overflow:"hidden" }}>
                                 <div style={{ width:`${(count/totalChannels)*100}%`, height:"100%", background:"var(--accent)", borderRadius:4 }} />
                               </div>
@@ -2087,7 +2087,7 @@ const AppMain = () => {
                       )}
                     </div>
                     <div style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, padding:"16px" }}>
-                      <div style={{ fontSize:13, fontWeight:700, color:"var(--text)", marginBottom:12 }}>⏰ En Uzun Bekleyen Hedefler</div>
+                      <div style={{ fontSize:13, fontWeight:700, color:"var(--text)", marginBottom:12 }}>{t(lang,"longest_waiting")}</div>
                       {allFeds
                         .filter((f:any) => ["persuadable","watch"].includes(overrides[f.countryCode]?.status || f.status))
                         .sort((a:any,b:any) => (lastContact[a.countryCode]||"0").localeCompare(lastContact[b.countryCode]||"0"))
@@ -2115,12 +2115,12 @@ const AppMain = () => {
         {/* ══ TAKVİM ══ */}
         {view === "takvim" && (() => {
           const KEY_EVENTS_WITH_COUNTRIES = [
-            { date:"2026-06-15", label:"Dünya Kupası — Doha", emoji:"🏆", countries:["QAT","KUW","BRN","UAE","EGY","JOR","OMA","IRQ"] },
-            { date:"2026-07-20", label:"Pan-Amerikan Şampiyonası", emoji:"🌎", countries:["BRA","ARG","COL","CHI","MEX","PER","VEN","URU"] },
-            { date:"2026-08-10", label:"Afrika Kupası", emoji:"🌍", countries:["EGY","MAR","RSA","SEN","NGR","ETH","CMR","GHA"] },
-            { date:"2026-09-05", label:"Asya Şampiyonası", emoji:"🌏", countries:["JPN","CHN","KOR","INA","THA","PHI","IND","MAS"] },
-            { date:"2026-09-25", label:"Avrupa Şampiyonası", emoji:"🇪🇺", countries:["GER","FRA","ITA","ESP","GBR","NED","SUI","BEL"] },
-            { date:"2026-10-01", label:"FIG Kongresi — Seçim", emoji:"🗳️", countries:[] },
+            { date:"2026-06-15", label:t(lang,"event_doha"), emoji:"🏆", countries:["QAT","KUW","BRN","UAE","EGY","JOR","OMA","IRQ"] },
+            { date:"2026-07-20", label:t(lang,"event_pan_american"), emoji:"🌎", countries:["BRA","ARG","COL","CHI","MEX","PER","VEN","URU"] },
+            { date:"2026-08-10", label:t(lang,"event_africa_cup"), emoji:"🌍", countries:["EGY","MAR","RSA","SEN","NGR","ETH","CMR","GHA"] },
+            { date:"2026-09-05", label:t(lang,"event_asia_champ"), emoji:"🌏", countries:["JPN","CHN","KOR","INA","THA","PHI","IND","MAS"] },
+            { date:"2026-09-25", label:t(lang,"event_europe_champ"), emoji:"🇪🇺", countries:["GER","FRA","ITA","ESP","GBR","NED","SUI","BEL"] },
+            { date:"2026-10-01", label:t(lang,"event_fig_congress"), emoji:"🗳️", countries:[] },
           ];
 
           const allFeds = federationSeeds.map((f:any) => ({...f, ...(overrides[f.countryCode]||{})}));
@@ -2128,8 +2128,8 @@ const AppMain = () => {
           return (
             <div className="tab-scroll">
               <div style={{ padding:"24px 20px", maxWidth:900, margin:"0 auto" }}>
-                <h2 style={{ fontSize:22, fontWeight:800, color:"var(--text)", marginBottom:4 }}>📅 Kampanya Takvimi</h2>
-                <p style={{ fontSize:13, color:"var(--muted)", marginBottom:24 }}>Hangi etkinlikte kime odaklanmalısın?</p>
+                <h2 style={{ fontSize:22, fontWeight:800, color:"var(--text)", marginBottom:4 }}>{t(lang,"campaign_calendar")}</h2>
+                <p style={{ fontSize:13, color:"var(--muted)", marginBottom:24 }}>{t(lang,"calendar_subtitle")}</p>
                 <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
                   {KEY_EVENTS_WITH_COUNTRIES.map(ev => {
                     const evFeds = ev.countries.map(code => allFeds.find((f:any) => f.countryCode === code)).filter(Boolean) as any[];
@@ -2143,20 +2143,20 @@ const AppMain = () => {
                           <span style={{ fontSize:22 }}>{ev.emoji}</span>
                           <div style={{ flex:1 }}>
                             <div style={{ fontSize:15, fontWeight:700, color:"var(--text)" }}>{ev.label}</div>
-                            <div style={{ fontSize:12, color:"var(--muted)" }}>{ev.date} · {daysLeft > 0 ? `${daysLeft} gün kaldı` : "Geçti"}</div>
+                            <div style={{ fontSize:12, color:"var(--muted)" }}>{ev.date} · {daysLeft > 0 ? `${daysLeft} ${t(lang,"days_left")}` : t(lang,"passed")}</div>
                           </div>
                           {ev.countries.length > 0 && (
                             <div style={{ display:"flex", gap:6 }}>
-                              {persuadable.length > 0 && <span style={{ fontSize:11, background:"rgba(59,130,246,0.2)", color:"#3b82f6", borderRadius:16, padding:"2px 8px", fontWeight:600 }}>{persuadable.length} ikna</span>}
-                              {watch.length > 0 && <span style={{ fontSize:11, background:"rgba(245,158,11,0.2)", color:"#f59e0b", borderRadius:16, padding:"2px 8px", fontWeight:600 }}>{watch.length} izleme</span>}
-                              {supporters.length > 0 && <span style={{ fontSize:11, background:"rgba(16,217,160,0.2)", color:"#10D9A0", borderRadius:16, padding:"2px 8px", fontWeight:600 }}>{supporters.length} destekçi</span>}
+                              {persuadable.length > 0 && <span style={{ fontSize:11, background:"rgba(59,130,246,0.2)", color:"#3b82f6", borderRadius:16, padding:"2px 8px", fontWeight:600 }}>{persuadable.length} {t(lang,"event_persuadable")}</span>}
+                              {watch.length > 0 && <span style={{ fontSize:11, background:"rgba(245,158,11,0.2)", color:"#f59e0b", borderRadius:16, padding:"2px 8px", fontWeight:600 }}>{watch.length} {t(lang,"event_watch")}</span>}
+                              {supporters.length > 0 && <span style={{ fontSize:11, background:"rgba(16,217,160,0.2)", color:"#10D9A0", borderRadius:16, padding:"2px 8px", fontWeight:600 }}>{supporters.length} {t(lang,"event_supporter")}</span>}
                             </div>
                           )}
                         </div>
                         {ev.countries.length > 0 && (
                           <div>
                             <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginBottom:8 }}>
-                              {persuadable.length > 0 ? "🎯 Önce Bunlarla Görüş:" : "Bu etkinlikteki federasyonlar:"}
+                              {persuadable.length > 0 ? t(lang,"meet_these_first") : t(lang,"feds_at_event")}
                             </div>
                             <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
                               {[...persuadable, ...watch, ...supporters].slice(0,12).map((f:any) => {
@@ -2176,7 +2176,7 @@ const AppMain = () => {
                           </div>
                         )}
                         {ev.countries.length === 0 && (
-                          <div style={{ textAlign:"center", padding:"8px", color:"var(--accent)", fontWeight:700 }}>🗳️ ANA HEDEF</div>
+                          <div style={{ textAlign:"center", padding:"8px", color:"var(--accent)", fontWeight:700 }}>{t(lang,"main_target")}</div>
                         )}
                       </div>
                     );
@@ -2216,8 +2216,8 @@ const AppMain = () => {
           return (
             <div className="tab-scroll">
               <div style={{ padding:"24px 20px", maxWidth:1100, margin:"0 auto" }}>
-                <h2 style={{ fontSize:22, fontWeight:800, color:"var(--text)", marginBottom:4 }}>🏛️ Kongre Şehri Tercihi</h2>
-                <p style={{ fontSize:13, color:"var(--muted)", marginBottom:24 }}>İstanbul mu, Roma mı? — FIG Kongresi'ne ev sahipliği yapacak şehir oylaması.</p>
+                <h2 style={{ fontSize:22, fontWeight:800, color:"var(--text)", marginBottom:4 }}>{t(lang,"congress_city_title")}</h2>
+                <p style={{ fontSize:13, color:"var(--muted)", marginBottom:24 }}>{t(lang,"congress_city_subtitle")}</p>
 
                 {/* Büyük Karşılaştırma Kartı */}
                 <div style={{ display:"grid", gridTemplateColumns:"1fr auto 1fr", gap:16, alignItems:"stretch", marginBottom:20 }}>
@@ -2227,11 +2227,11 @@ const AppMain = () => {
                       <span style={{ fontSize:28 }}>🇹🇷</span>
                       <div>
                         <div style={{ fontSize:18, fontWeight:800, color:"#0ea5e9" }}>İstanbul</div>
-                        <div style={{ fontSize:11, color:"var(--muted)" }}>Türkiye adaylığı</div>
+                        <div style={{ fontSize:11, color:"var(--muted)" }}>{t(lang,"istanbul_candidacy")}</div>
                       </div>
                     </div>
                     <div style={{ fontSize:48, fontWeight:800, color:"#0ea5e9", lineHeight:1 }}>{istanbulList.length}</div>
-                    <div style={{ fontSize:13, color:"var(--muted)", marginTop:4 }}>federasyon destekliyor (%{iPct})</div>
+                    <div style={{ fontSize:13, color:"var(--muted)", marginTop:4 }}>{t(lang,"federations_support")} (%{iPct})</div>
                     <div style={{ marginTop:10, height:8, background:"var(--surface2)", borderRadius:4, overflow:"hidden" }}>
                       <div style={{ width:`${iPct}%`, height:"100%", background:"#0ea5e9" }} />
                     </div>
@@ -2243,11 +2243,11 @@ const AppMain = () => {
                       <span style={{ fontSize:28 }}>🇮🇹</span>
                       <div>
                         <div style={{ fontSize:18, fontWeight:800, color:"#dc2626" }}>Roma</div>
-                        <div style={{ fontSize:11, color:"var(--muted)" }}>İtalya adaylığı</div>
+                        <div style={{ fontSize:11, color:"var(--muted)" }}>{t(lang,"rome_candidacy")}</div>
                       </div>
                     </div>
                     <div style={{ fontSize:48, fontWeight:800, color:"#dc2626", lineHeight:1 }}>{romaList.length}</div>
-                    <div style={{ fontSize:13, color:"var(--muted)", marginTop:4 }}>federasyon destekliyor (%{rPct})</div>
+                    <div style={{ fontSize:13, color:"var(--muted)", marginTop:4 }}>{t(lang,"federations_support")} (%{rPct})</div>
                     <div style={{ marginTop:10, height:8, background:"var(--surface2)", borderRadius:4, overflow:"hidden" }}>
                       <div style={{ width:`${rPct}%`, height:"100%", background:"#dc2626" }} />
                     </div>
@@ -2257,15 +2257,15 @@ const AppMain = () => {
                 {/* Özet Satırı */}
                 <div style={{ display:"flex", gap:10, marginBottom:20, flexWrap:"wrap" }}>
                   <div style={{ flex:1, minWidth:140, background:"var(--surface)", border:"1px solid var(--border)", borderRadius:10, padding:"10px 14px" }}>
-                    <div style={{ fontSize:11, color:"var(--muted)" }}>❓ Kararsız</div>
+                    <div style={{ fontSize:11, color:"var(--muted)" }}>{t(lang,"undecided")}</div>
                     <div style={{ fontSize:20, fontWeight:800, color:"#f59e0b" }}>{kararsızList.length} <span style={{ fontSize:11, color:"var(--muted)" }}>(%{kPct})</span></div>
                   </div>
                   <div style={{ flex:1, minWidth:140, background:"var(--surface)", border:"1px solid var(--border)", borderRadius:10, padding:"10px 14px" }}>
-                    <div style={{ fontSize:11, color:"var(--muted)" }}>⚫ Bilinmiyor</div>
+                    <div style={{ fontSize:11, color:"var(--muted)" }}>{t(lang,"unknown_lbl")}</div>
                     <div style={{ fontSize:20, fontWeight:800, color:"var(--muted)" }}>{bilinmiyorList.length}</div>
                   </div>
                   <div style={{ flex:1, minWidth:140, background:"var(--surface)", border:"1px solid var(--border)", borderRadius:10, padding:"10px 14px" }}>
-                    <div style={{ fontSize:11, color:"var(--muted)" }}>🎯 Fark</div>
+                    <div style={{ fontSize:11, color:"var(--muted)" }}>{t(lang,"gap")}</div>
                     <div style={{ fontSize:20, fontWeight:800, color: istanbulList.length >= romaList.length ? "#0ea5e9" : "#dc2626" }}>
                       {istanbulList.length >= romaList.length ? "İST" : "ROM"} +{Math.abs(istanbulList.length - romaList.length)}
                     </div>
@@ -2274,7 +2274,7 @@ const AppMain = () => {
 
                 {/* Kıta Bazlı Tablo */}
                 <div style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, padding:"14px 16px", marginBottom:20 }}>
-                  <div style={{ fontSize:13, fontWeight:700, color:"var(--text)", marginBottom:12 }}>🌍 Kıta Bazlı Dağılım</div>
+                  <div style={{ fontSize:13, fontWeight:700, color:"var(--text)", marginBottom:12 }}>{t(lang,"continent_distribution")}</div>
                   {Object.entries(continentBreak).map(([cont, br]) => {
                     const contTotal = br.istanbul + br.roma + br.kararsız + br.bilinmiyor;
                     if (contTotal === 0) return null;
@@ -2298,11 +2298,11 @@ const AppMain = () => {
                 {/* Filtre Sekmeleri */}
                 <div style={{ display:"flex", gap:6, marginBottom:14, flexWrap:"wrap" }}>
                   {[
-                    {val:"all", label:`Tümü (${total})`, color:"var(--accent)"},
+                    {val:"all", label:`${t(lang,"all_lbl")} (${total})`, color:"var(--accent)"},
                     {val:"istanbul", label:`🇹🇷 İstanbul (${istanbulList.length})`, color:"#0ea5e9"},
                     {val:"roma", label:`🇮🇹 Roma (${romaList.length})`, color:"#dc2626"},
-                    {val:"kararsız", label:`❓ Kararsız (${kararsızList.length})`, color:"#f59e0b"},
-                    {val:"bilinmiyor", label:`⚫ Bilinmiyor (${bilinmiyorList.length})`, color:"#475569"},
+                    {val:"kararsız", label:`${t(lang,"undecided")} (${kararsızList.length})`, color:"#f59e0b"},
+                    {val:"bilinmiyor", label:`${t(lang,"unknown_lbl")} (${bilinmiyorList.length})`, color:"#475569"},
                   ].map(opt => (
                     <button
                       key={opt.val}
@@ -2361,7 +2361,7 @@ const AppMain = () => {
                   </div>
                   {filteredList.length > 60 && (
                     <div style={{ textAlign:"center", fontSize:11, color:"var(--muted)", marginTop:10 }}>
-                      İlk 60 federasyon gösteriliyor (toplam {filteredList.length})
+                      {t(lang,"first_n_shown")} {filteredList.length})
                     </div>
                   )}
                 </div>
@@ -2393,9 +2393,9 @@ const AppMain = () => {
                 type="button"
                 className="ds-print-btn"
                 onClick={() => window.print()}
-                title="Brifing Notu Yazdır"
+                title={t(lang,"print_briefing")}
               >
-                🖨️ Yazdır
+                {t(lang,"print_briefing")}
               </button>
               <button type="button" className="sheet-x" onClick={() => setSheet(null)}><IcX /></button>
             </div>
@@ -2604,7 +2604,7 @@ const AppMain = () => {
                 {/* Status History */}
                 {statusHistory[selected?.countryCode]?.length > 0 && (
                   <div style={{ marginTop:16, background:"var(--surface2,#1a2533)", borderRadius:8, padding:"10px 12px" }}>
-                    <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginBottom:8, letterSpacing:"0.05em" }}>DURUM GEÇMİŞİ</div>
+                    <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginBottom:8, letterSpacing:"0.05em" }}>{t(lang,"status_history")}</div>
                     {statusHistory[selected.countryCode].slice().reverse().map((h, i) => (
                       <div key={i} className="status-history-row">
                         <span style={{ fontSize:11, color:"var(--muted)" }}>{h.date}</span>
@@ -2619,7 +2619,7 @@ const AppMain = () => {
                   const metrics = buildCountryDashboard(selected);
                   return metrics.length > 0 ? (
                     <div style={{ marginTop:16 }}>
-                      <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginBottom:8, letterSpacing:"0.05em" }}>STRATEJİK METRİKLER</div>
+                      <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginBottom:8, letterSpacing:"0.05em" }}>{t(lang,"strategic_metrics")}</div>
                       <div className="country-dashboard-grid">
                         {metrics.map((m, i) => (
                           <div key={i} className="country-metric-card">
@@ -2641,7 +2641,7 @@ const AppMain = () => {
                   const narrative = buildFacilityNarrative(selected);
                   return narrative ? (
                     <div style={{ marginTop:12, padding:"8px 12px", background:"var(--surface2,#1a2533)", borderRadius:8 }}>
-                      <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginBottom:4, letterSpacing:"0.05em" }}>TESİS & ORGANİZASYON</div>
+                      <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginBottom:4, letterSpacing:"0.05em" }}>{t(lang,"facilities_org")}</div>
                       <p style={{ fontSize:12, color:"var(--text)", margin:0, lineHeight:1.6 }}>{narrative}</p>
                     </div>
                   ) : null;
@@ -2652,7 +2652,7 @@ const AppMain = () => {
                   const roles = buildRoleDigest(selected);
                   return roles.length > 0 ? (
                     <div style={{ marginTop:12 }}>
-                      <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginBottom:8, letterSpacing:"0.05em" }}>FIG ROLLERİ</div>
+                      <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginBottom:8, letterSpacing:"0.05em" }}>{t(lang,"fig_roles_title")}</div>
                       {roles.map((r, i) => (
                         <div key={i} className="role-digest-row">
                           <div style={{ fontWeight:600, fontSize:12, color:"var(--accent)" }}>{r.title}</div>
@@ -2672,7 +2672,7 @@ const AppMain = () => {
                 {/* WhatsApp Şablon */}
                 <div style={{ background:"#1a2d1a", border:"1px solid #2d5a2d", borderRadius:10, padding:"12px 14px", marginBottom:16 }}>
                   <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
-                    <span style={{ fontSize:13, fontWeight:700, color:"#4ade80" }}>📋 WhatsApp Taslağı</span>
+                    <span style={{ fontSize:13, fontWeight:700, color:"#4ade80" }}>{t(lang,"whatsapp_draft")}</span>
                     <button
                       type="button"
                       onClick={() => {
@@ -2684,7 +2684,7 @@ const AppMain = () => {
                       }}
                       style={{ background: msgCopied ? "#166534" : "#15803d", color:"#fff", border:"none", borderRadius:6, padding:"4px 12px", fontSize:12, fontWeight:600, cursor:"pointer" }}
                     >
-                      {msgCopied ? "✓ Kopyalandı!" : "📋 Kopyala"}
+                      {msgCopied ? t(lang,"copied_btn") : t(lang,"copy_btn")}
                     </button>
                   </div>
                   <pre style={{ fontSize:11, color:"#86efac", margin:0, whiteSpace:"pre-wrap", lineHeight:1.6, fontFamily:"inherit" }}>
@@ -3047,15 +3047,15 @@ const AppMain = () => {
 
                 {/* FEATURE 1: Taahhüt Seviyesi */}
                 <div className="ds-block">
-                  <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginBottom:8, letterSpacing:"0.05em" }}>TAAHHÜT SEVİYESİ</div>
+                  <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginBottom:8, letterSpacing:"0.05em" }}>{t(lang,"commitment_level")}</div>
                   <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:6 }}>
                     {[
-                      {level:1, label:"Temas yok", color:"#475569"},
-                      {level:2, label:"Tanışma yapıldı", color:"#ca8a04"},
-                      {level:3, label:"İlgi gösterdi", color:"#ea580c"},
-                      {level:4, label:"Sözlü olumlu", color:"#16a34a"},
-                      {level:5, label:"Kesin taahhüt", color:"#0d9488"},
-                      {level:6, label:"Yazılı taahhüt", color:"#7c3aed"},
+                      {level:1, label:t(lang,"commit_no_contact"), color:"#475569"},
+                      {level:2, label:t(lang,"commit_introduced"), color:"#ca8a04"},
+                      {level:3, label:t(lang,"commit_interested"), color:"#ea580c"},
+                      {level:4, label:t(lang,"commit_verbal_yes"), color:"#16a34a"},
+                      {level:5, label:t(lang,"commit_firm_yes"), color:"#0d9488"},
+                      {level:6, label:t(lang,"commit_written"), color:"#7c3aed"},
                     ].map(({level, label, color}) => {
                       const current = (overrides[selected.countryCode]?.commitmentLevel as number|undefined) ?? 1;
                       return (
@@ -3084,14 +3084,14 @@ const AppMain = () => {
 
                 {/* FEATURE 2: Kongre Katılımı */}
                 <div className="ds-block">
-                  <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginBottom:8, letterSpacing:"0.05em" }}>KONGRE KATILIMI</div>
+                  <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginBottom:8, letterSpacing:"0.05em" }}>{t(lang,"congress_attendance")}</div>
                   <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
                     {[
-                      {val:"confirmed", label:"Kesin gelecek", icon:"✈️", color:"#16a34a"},
-                      {val:"likely", label:"Büyük ihtimalle", icon:"🟢", color:"#0d9488"},
-                      {val:"uncertain", label:"Belirsiz", icon:"❓", color:"#ca8a04"},
-                      {val:"no", label:"Gelmeyecek", icon:"✗", color:"#dc2626"},
-                      {val:"unknown", label:"Bilinmiyor", icon:"—", color:"#475569"},
+                      {val:"confirmed", label:t(lang,"att_confirmed"), icon:"✈️", color:"#16a34a"},
+                      {val:"likely", label:t(lang,"att_likely"), icon:"🟢", color:"#0d9488"},
+                      {val:"uncertain", label:t(lang,"att_uncertain"), icon:"❓", color:"#ca8a04"},
+                      {val:"no", label:t(lang,"att_no"), icon:"✗", color:"#dc2626"},
+                      {val:"unknown", label:t(lang,"att_unknown"), icon:"—", color:"#475569"},
                     ].map(({val, label, icon, color}) => {
                       const current = (overrides[selected.countryCode]?.congressAttendance as string|undefined) ?? "unknown";
                       return (
@@ -3114,7 +3114,7 @@ const AppMain = () => {
                   </div>
                   <div style={{ marginTop:8 }}>
                     <input
-                      placeholder="Not (seyahat desteği, delegasyon vb.)"
+                      placeholder={t(lang,"attendance_note_ph")}
                       value={(overrides[selected.countryCode]?.attendanceNote as string|undefined) ?? ""}
                       onChange={e => setOverride(selected.countryCode, { attendanceNote: e.target.value } as any)}
                       style={{ width:"100%", background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:6, padding:"6px 8px", color:"var(--text)", fontSize:12, boxSizing:"border-box" }}
@@ -3124,13 +3124,13 @@ const AppMain = () => {
 
                 {/* ── KONGRE ŞEHRİ TERCİHİ — İstanbul vs Roma ── */}
                 <div style={{ marginBottom:16 }}>
-                  <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginBottom:8, letterSpacing:"0.05em" }}>🏛️ KONGRE ŞEHRİ TERCİHİ</div>
+                  <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginBottom:8, letterSpacing:"0.05em" }}>{t(lang,"host_city_preference")}</div>
                   <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:6 }}>
                     {[
                       {val:"istanbul" as CityVote, label:"🇹🇷 İstanbul", color:"#0ea5e9"},
                       {val:"roma" as CityVote, label:"🇮🇹 Roma", color:"#dc2626"},
-                      {val:"kararsız" as CityVote, label:"❓ Kararsız", color:"#f59e0b"},
-                      {val:"bilinmiyor" as CityVote, label:"⚫ Bilinmiyor", color:"#475569"},
+                      {val:"kararsız" as CityVote, label:t(lang,"undecided"), color:"#f59e0b"},
+                      {val:"bilinmiyor" as CityVote, label:t(lang,"unknown_lbl"), color:"#475569"},
                     ].map(({val, label, color}) => {
                       const current = (overrides[selected.countryCode]?.cityVote as CityVote|undefined) ?? "bilinmiyor";
                       return (
@@ -3153,7 +3153,7 @@ const AppMain = () => {
                   </div>
                   <div style={{ marginTop:8 }}>
                     <input
-                      placeholder="Şehir tercihi notu (ne dedi, neden bu tercih...)"
+                      placeholder={t(lang,"city_vote_note_ph")}
                       value={(overrides[selected.countryCode]?.cityVoteNote as string|undefined) ?? ""}
                       onChange={e => setOverride(selected.countryCode, { cityVoteNote: e.target.value })}
                       style={{ width:"100%", background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:6, padding:"6px 8px", color:"var(--text)", fontSize:12, boxSizing:"border-box" }}
@@ -3177,7 +3177,7 @@ const AppMain = () => {
                     const narrative = buildAthleteNarrative(selected);
                     return narrative ? (
                       <div style={{ marginBottom:16, padding:"8px 12px", background:"var(--surface2,#1a2533)", borderRadius:8 }}>
-                        <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginBottom:4, letterSpacing:"0.05em" }}>SPORCU KAPASİTESİ</div>
+                        <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginBottom:4, letterSpacing:"0.05em" }}>{t(lang,"athlete_capacity_title")}</div>
                         <p style={{ fontSize:12, color:"var(--text)", margin:0, lineHeight:1.6 }}>{narrative}</p>
                       </div>
                     ) : null;
@@ -3337,9 +3337,17 @@ const AppMain = () => {
                       />
                       {/* FEATURE 4: Objection tags */}
                       <div style={{ marginTop:6 }}>
-                        <div style={{ fontSize:11, color:"var(--muted)", marginBottom:4 }}>İtiraz türleri (opsiyonel)</div>
+                        <div style={{ fontSize:11, color:"var(--muted)", marginBottom:4 }}>{t(lang,"objection_types_label")}</div>
                         <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
-                          {["Rakibi tercih ediyor","Kaynak sorunu","Bilgi eksikliği","Politik baskı","Kişisel ilişki yok","Kurumsal hafıza","Diğer"].map(obj => (
+                          {[
+                            {key:"Rakibi tercih ediyor", label:t(lang,"obj_prefer_competitor")},
+                            {key:"Kaynak sorunu", label:t(lang,"obj_resource_issue")},
+                            {key:"Bilgi eksikliği", label:t(lang,"obj_info_gap")},
+                            {key:"Politik baskı", label:t(lang,"obj_political_pressure")},
+                            {key:"Kişisel ilişki yok", label:t(lang,"obj_no_personal_rel")},
+                            {key:"Kurumsal hafıza", label:t(lang,"obj_institutional_memory")},
+                            {key:"Diğer", label:t(lang,"obj_other")},
+                          ].map(({key:obj, label:objLabel}) => (
                             <button
                               key={obj}
                               type="button"
@@ -3352,7 +3360,7 @@ const AppMain = () => {
                                 borderRadius:16, padding:"3px 10px", fontSize:11, color:"var(--text)", cursor:"pointer",
                               }}
                             >
-                              {obj}
+                              {objLabel}
                             </button>
                           ))}
                         </div>
@@ -3401,10 +3409,10 @@ const AppMain = () => {
                 {/* FEATURE 6: Etki Ağı */}
                 {(selected.relationshipNetwork ?? []).length > 0 && (
                   <div style={{ marginTop:16 }}>
-                    <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginBottom:10, letterSpacing:"0.05em" }}>📡 ETKİ AĞI</div>
+                    <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginBottom:10, letterSpacing:"0.05em" }}>{t(lang,"influence_network")}</div>
                     {selected.relationshipNetwork.map((rel, i) => {
                       const kindColors: Record<string,string> = {ally:"#4ade80", swing:"#fbbf24", competitive:"#f87171"};
-                      const kindLabels: Record<string,string> = {ally:"🤝 Müttefik", swing:"↔️ Sallanıyor", competitive:"⚔️ Rekabetçi"};
+                      const kindLabels: Record<string,string> = {ally:t(lang,"rel_ally"), swing:t(lang,"rel_swing"), competitive:t(lang,"rel_competitive")};
                       return (
                         <div key={i} style={{ display:"flex", alignItems:"center", gap:10, padding:"6px 10px", background:"var(--surface2)", borderRadius:6, marginBottom:6, border:`1px solid ${(kindColors[rel.kind]||"var(--border)")}20` }}>
                           <span style={{ fontSize:11, fontWeight:700, color:kindColors[rel.kind]||"var(--muted)", minWidth:110 }}>
@@ -3422,7 +3430,7 @@ const AppMain = () => {
                 {/* FEATURE 5: Risk Kayıtları */}
                 <div style={{ marginTop:16 }}>
                   <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
-                    <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", letterSpacing:"0.05em" }}>⚠️ RİSK KAYITLARI</div>
+                    <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", letterSpacing:"0.05em" }}>{t(lang,"risk_records")}</div>
                     <button
                       type="button"
                       onClick={() => {
@@ -3432,11 +3440,11 @@ const AppMain = () => {
                       }}
                       style={{ background:"var(--accent)", color:"#fff", border:"none", borderRadius:6, padding:"3px 10px", fontSize:11, cursor:"pointer", fontWeight:600 }}
                     >
-                      + Risk Ekle
+                      {t(lang,"add_risk")}
                     </button>
                   </div>
                   {(risks[selected.countryCode] || []).length === 0 ? (
-                    <p style={{ fontSize:12, color:"var(--muted)", margin:0 }}>Risk kaydı yok.</p>
+                    <p style={{ fontSize:12, color:"var(--muted)", margin:0 }}>{t(lang,"no_risks")}</p>
                   ) : (
                     <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
                       {(risks[selected.countryCode] || []).map((r: any, i: number) => (
@@ -3455,11 +3463,11 @@ const AppMain = () => {
                               }}
                               style={{ background:"transparent", border:"none", color:"var(--accent)", fontSize:11, fontWeight:700, cursor:"pointer" }}
                             >
-                              <option value="leadership_change">👤 Liderlik değişikliği</option>
-                              <option value="budget">💰 Bütçe sorunu</option>
-                              <option value="competitor_offer">⚔️ Rakip teklif</option>
-                              <option value="event_conflict">📅 Etkinlik çakışması</option>
-                              <option value="other">⚠️ Diğer</option>
+                              <option value="leadership_change">{t(lang,"risk_leadership")}</option>
+                              <option value="budget">{t(lang,"risk_budget")}</option>
+                              <option value="competitor_offer">{t(lang,"risk_competitor_offer")}</option>
+                              <option value="event_conflict">{t(lang,"risk_event_conflict")}</option>
+                              <option value="other">{t(lang,"risk_other")}</option>
                             </select>
                             <select
                               value={r.severity}
@@ -3470,9 +3478,9 @@ const AppMain = () => {
                               }}
                               style={{ background:"transparent", border:"none", color: r.severity==="high"?"#f87171":r.severity==="medium"?"#fbbf24":"#94a3b8", fontSize:11, cursor:"pointer" }}
                             >
-                              <option value="high">🔴 Yüksek</option>
-                              <option value="medium">🟡 Orta</option>
-                              <option value="low">🟢 Düşük</option>
+                              <option value="high">{t(lang,"risk_severity_high")}</option>
+                              <option value="medium">{t(lang,"risk_severity_medium")}</option>
+                              <option value="low">{t(lang,"risk_severity_low")}</option>
                             </select>
                             <span style={{ marginLeft:"auto", fontSize:10, color:"var(--muted)" }}>{r.date}</span>
                             <button type="button" onClick={() => {
@@ -3480,7 +3488,7 @@ const AppMain = () => {
                               updated[i] = {...r, resolved: !r.resolved};
                               set(ref(db, `fig-v3/risks/${selected.countryCode}`), updated);
                             }} style={{ background:"transparent", border:"none", cursor:"pointer", fontSize:11, color: r.resolved ? "#4ade80" : "var(--muted)" }}>
-                              {r.resolved ? "✅ Çözüldü" : "○ Çöz"}
+                              {r.resolved ? t(lang,"risk_resolved") : t(lang,"risk_resolve")}
                             </button>
                             <button type="button" onClick={() => {
                               const updated = (risks[selected.countryCode] || []).filter((_:any, idx:number) => idx !== i);
@@ -3494,7 +3502,7 @@ const AppMain = () => {
                               updated[i] = {...r, note: e.target.value};
                               set(ref(db, `fig-v3/risks/${selected.countryCode}`), updated);
                             }}
-                            placeholder="Risk açıklaması..."
+                            placeholder={t(lang,"risk_description_ph")}
                             rows={2}
                             style={{ width:"100%", background:"transparent", border:"none", color:"var(--text)", fontSize:12, resize:"none", fontFamily:"inherit", boxSizing:"border-box" }}
                           />

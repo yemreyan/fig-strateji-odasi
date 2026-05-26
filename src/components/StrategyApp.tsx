@@ -619,6 +619,14 @@ const AppMain = () => {
   const [citySearch, setCitySearch] = useState("");
   const [cityPageSize, setCityPageSize] = useState(40);
 
+  // Feature: Editable Calendar
+  type CalEvent = { id: string; date: string; label: string; emoji: string; countries: string[]; note?: string };
+  const [calendarEvents, setCalendarEvents] = useState<CalEvent[] | null>(null);
+  const [calEditingId, setCalEditingId] = useState<string | null>(null);
+  const [calDraft, setCalDraft] = useState<CalEvent>({ id:"", date:"", label:"", emoji:"📅", countries:[], note:"" });
+  const [calCountryPicker, setCalCountryPicker] = useState<string | null>(null); // event id for which we're showing the picker
+  const [calCountrySearch, setCalCountrySearch] = useState("");
+
   // Firebase listeners
   useEffect(() => {
     const unsub = onValue(ref(db, "fig-v3/notes"), snap => {
@@ -702,6 +710,20 @@ const AppMain = () => {
       setRisks(snap.val() || {});
     });
     return risksUnsub;
+  }, []);
+
+  useEffect(() => {
+    const calUnsub = onValue(ref(db, "fig-v3/calendarEvents"), snap => {
+      const val = snap.val();
+      if (val && typeof val === "object") {
+        // Firebase returns object keyed by id → convert to array
+        const arr = Object.values(val) as CalEvent[];
+        setCalendarEvents(arr);
+      } else {
+        setCalendarEvents([]); // empty array (no events yet)
+      }
+    });
+    return calUnsub;
   }, []);
 
   // Harita dışına çıkınca mapPreview sıfırla
@@ -2117,69 +2139,236 @@ const AppMain = () => {
 
         {/* ══ TAKVİM ══ */}
         {view === "takvim" && (() => {
-          const KEY_EVENTS_WITH_COUNTRIES = [
-            { date:"2026-06-15", label:t(lang,"event_doha"), emoji:"🏆", countries:["QAT","KUW","BRN","UAE","EGY","JOR","OMA","IRQ"] },
-            { date:"2026-07-20", label:t(lang,"event_pan_american"), emoji:"🌎", countries:["BRA","ARG","COL","CHI","MEX","PER","VEN","URU"] },
-            { date:"2026-08-10", label:t(lang,"event_africa_cup"), emoji:"🌍", countries:["EGY","MAR","RSA","SEN","NGR","ETH","CMR","GHA"] },
-            { date:"2026-09-05", label:t(lang,"event_asia_champ"), emoji:"🌏", countries:["JPN","CHN","KOR","INA","THA","PHI","IND","MAS"] },
-            { date:"2026-09-25", label:t(lang,"event_europe_champ"), emoji:"🇪🇺", countries:["GER","FRA","ITA","ESP","GBR","NED","SUI","BEL"] },
-            { date:"2026-10-01", label:t(lang,"event_fig_congress"), emoji:"🗳️", countries:[] },
+          // Varsayılan etkinlikler (Firebase boşsa seed butonuyla yüklenir)
+          const DEFAULT_EVENTS: CalEvent[] = [
+            { id:"e_doha",     date:"2026-06-15", label:t(lang,"event_doha"),         emoji:"🏆", countries:["QAT","KUW","BRN","UAE","EGY","JOR","OMA","IRQ"], note:"" },
+            { id:"e_panam",    date:"2026-07-20", label:t(lang,"event_pan_american"), emoji:"🌎", countries:["BRA","ARG","COL","CHI","MEX","PER","VEN","URU"], note:"" },
+            { id:"e_africa",   date:"2026-08-10", label:t(lang,"event_africa_cup"),   emoji:"🌍", countries:["EGY","MAR","RSA","SEN","NGR","ETH","CMR","GHA"], note:"" },
+            { id:"e_asia",     date:"2026-09-05", label:t(lang,"event_asia_champ"),   emoji:"🌏", countries:["JPN","CHN","KOR","INA","THA","PHI","IND","MAS"], note:"" },
+            { id:"e_europe",   date:"2026-09-25", label:t(lang,"event_europe_champ"), emoji:"🇪🇺", countries:["GER","FRA","ITA","ESP","GBR","NED","SUI","BEL"], note:"" },
+            { id:"e_congress", date:"2026-10-01", label:t(lang,"event_fig_congress"), emoji:"🗳️", countries:[], note:"" },
           ];
 
+          const events: CalEvent[] = calendarEvents && calendarEvents.length > 0 ? calendarEvents : [];
+          const sortedEvents = [...events].sort((a,b) => a.date.localeCompare(b.date));
           const allFeds = federationSeeds.map((f:any) => ({...f, ...(overrides[f.countryCode]||{})}));
+
+          // CRUD helpers
+          const saveEvents = (next: CalEvent[]) => {
+            const obj: Record<string, CalEvent> = {};
+            next.forEach(e => { obj[e.id] = e; });
+            set(ref(db, "fig-v3/calendarEvents"), obj);
+          };
+          const addEvent = () => {
+            const newId = `e_${Date.now()}`;
+            const newEvent: CalEvent = { id:newId, date:new Date().toISOString().slice(0,10), label:lang==="tr"?"Yeni Etkinlik":"New Event", emoji:"📅", countries:[], note:"" };
+            saveEvents([...events, newEvent]);
+            setCalEditingId(newId);
+            setCalDraft(newEvent);
+          };
+          const seedDefaults = () => {
+            saveEvents(DEFAULT_EVENTS);
+          };
+          const deleteEvent = (id: string) => {
+            if (!confirm(lang === "tr" ? "Bu etkinliği silmek istediğine emin misin?" : "Are you sure you want to delete this event?")) return;
+            saveEvents(events.filter(e => e.id !== id));
+          };
+          const updateEvent = (id: string, patch: Partial<CalEvent>) => {
+            saveEvents(events.map(e => e.id === id ? {...e, ...patch} : e));
+          };
+          const toggleCountry = (eventId: string, code: string) => {
+            const ev = events.find(e => e.id === eventId);
+            if (!ev) return;
+            const has = ev.countries.includes(code);
+            const newCountries = has ? ev.countries.filter(c => c !== code) : [...ev.countries, code];
+            updateEvent(eventId, { countries: newCountries });
+          };
 
           return (
             <div className="tab-scroll">
-              <div style={{ padding:"24px 20px", maxWidth:900, margin:"0 auto" }}>
-                <h2 style={{ fontSize:22, fontWeight:800, color:"var(--text)", marginBottom:4 }}>{t(lang,"campaign_calendar")}</h2>
-                <p style={{ fontSize:13, color:"var(--muted)", marginBottom:24 }}>{t(lang,"calendar_subtitle")}</p>
+              <div style={{ padding:"24px 20px", maxWidth:1000, margin:"0 auto" }}>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:4, flexWrap:"wrap", gap:8 }}>
+                  <h2 style={{ fontSize:22, fontWeight:800, color:"var(--text)", margin:0 }}>{t(lang,"campaign_calendar")}</h2>
+                  <div style={{ display:"flex", gap:8 }}>
+                    {events.length === 0 && (
+                      <button type="button" onClick={seedDefaults} style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8, padding:"6px 12px", fontSize:12, color:"var(--text)", cursor:"pointer", fontWeight:600 }}>
+                        {lang === "tr" ? "🌱 Varsayılan etkinlikleri yükle" : "🌱 Load default events"}
+                      </button>
+                    )}
+                    <button type="button" onClick={addEvent} style={{ background:"var(--accent)", color:"#fff", border:"none", borderRadius:8, padding:"6px 12px", fontSize:12, cursor:"pointer", fontWeight:700 }}>
+                      + {lang === "tr" ? "Etkinlik Ekle" : "Add Event"}
+                    </button>
+                  </div>
+                </div>
+                <p style={{ fontSize:13, color:"var(--muted)", marginBottom:20 }}>{t(lang,"calendar_subtitle")}</p>
+
+                {events.length === 0 && (
+                  <div style={{ textAlign:"center", padding:"40px 20px", background:"var(--surface)", border:"1px dashed var(--border)", borderRadius:12, color:"var(--muted)" }}>
+                    <div style={{ fontSize:36, marginBottom:8 }}>📅</div>
+                    <div style={{ fontSize:14 }}>{lang === "tr" ? "Henüz etkinlik yok. Yeni ekleyin veya varsayılanları yükleyin." : "No events yet. Add new or load defaults."}</div>
+                  </div>
+                )}
+
                 <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
-                  {KEY_EVENTS_WITH_COUNTRIES.map(ev => {
+                  {sortedEvents.map(ev => {
+                    const isEditing = calEditingId === ev.id;
                     const evFeds = ev.countries.map(code => allFeds.find((f:any) => f.countryCode === code)).filter(Boolean) as any[];
                     const persuadable = evFeds.filter((f:any) => (overrides[f.countryCode]?.status||f.status) === "persuadable");
                     const watch = evFeds.filter((f:any) => (overrides[f.countryCode]?.status||f.status) === "watch");
                     const supporters = evFeds.filter((f:any) => (overrides[f.countryCode]?.status||f.status) === "supporter");
                     const daysLeft = Math.max(0, Math.ceil((new Date(ev.date).getTime() - Date.now()) / (1000*60*60*24)));
+                    const isPickerOpen = calCountryPicker === ev.id;
+                    const searchLower = calCountrySearch.trim().toLowerCase();
+                    const pickerList = searchLower
+                      ? federationSeeds.filter(f => f.countryCode.toLowerCase().includes(searchLower) || trName(f).toLowerCase().includes(searchLower))
+                      : federationSeeds;
+
                     return (
-                      <div key={ev.date} style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, padding:"16px 18px" }}>
-                        <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:12 }}>
-                          <span style={{ fontSize:22 }}>{ev.emoji}</span>
-                          <div style={{ flex:1 }}>
-                            <div style={{ fontSize:15, fontWeight:700, color:"var(--text)" }}>{ev.label}</div>
-                            <div style={{ fontSize:12, color:"var(--muted)" }}>{ev.date} · {daysLeft > 0 ? `${daysLeft} ${t(lang,"days_left")}` : t(lang,"passed")}</div>
-                          </div>
-                          {ev.countries.length > 0 && (
+                      <div key={ev.id} style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, padding:"16px 18px" }}>
+                        {/* Header — Edit mode vs View mode */}
+                        {isEditing ? (
+                          <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:14 }}>
+                            <div style={{ display:"flex", gap:8 }}>
+                              <input
+                                type="text"
+                                value={calDraft.emoji}
+                                onChange={e => setCalDraft(p => ({...p, emoji: e.target.value}))}
+                                placeholder="🏆"
+                                style={{ width:60, background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8, padding:"6px 10px", color:"var(--text)", fontSize:20, textAlign:"center" }}
+                              />
+                              <input
+                                type="date"
+                                value={calDraft.date}
+                                onChange={e => setCalDraft(p => ({...p, date: e.target.value}))}
+                                style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8, padding:"6px 10px", color:"var(--text)", fontSize:13 }}
+                              />
+                              <input
+                                type="text"
+                                value={calDraft.label}
+                                onChange={e => setCalDraft(p => ({...p, label: e.target.value}))}
+                                placeholder={lang === "tr" ? "Etkinlik adı" : "Event name"}
+                                style={{ flex:1, background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8, padding:"6px 10px", color:"var(--text)", fontSize:13, fontWeight:600 }}
+                              />
+                            </div>
+                            <textarea
+                              value={calDraft.note || ""}
+                              onChange={e => setCalDraft(p => ({...p, note: e.target.value}))}
+                              placeholder={lang === "tr" ? "Not (opsiyonel)..." : "Note (optional)..."}
+                              rows={2}
+                              style={{ width:"100%", background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8, padding:"6px 10px", color:"var(--text)", fontSize:12, resize:"vertical", boxSizing:"border-box", fontFamily:"inherit" }}
+                            />
                             <div style={{ display:"flex", gap:6 }}>
-                              {persuadable.length > 0 && <span style={{ fontSize:11, background:"rgba(59,130,246,0.2)", color:"#3b82f6", borderRadius:16, padding:"2px 8px", fontWeight:600 }}>{persuadable.length} {t(lang,"event_persuadable")}</span>}
-                              {watch.length > 0 && <span style={{ fontSize:11, background:"rgba(245,158,11,0.2)", color:"#f59e0b", borderRadius:16, padding:"2px 8px", fontWeight:600 }}>{watch.length} {t(lang,"event_watch")}</span>}
-                              {supporters.length > 0 && <span style={{ fontSize:11, background:"rgba(16,217,160,0.2)", color:"#10D9A0", borderRadius:16, padding:"2px 8px", fontWeight:600 }}>{supporters.length} {t(lang,"event_supporter")}</span>}
+                              <button type="button" onClick={() => { updateEvent(ev.id, calDraft); setCalEditingId(null); }} style={{ background:"var(--accent)", color:"#fff", border:"none", borderRadius:6, padding:"6px 14px", fontSize:12, fontWeight:600, cursor:"pointer" }}>
+                                ✓ {lang === "tr" ? "Kaydet" : "Save"}
+                              </button>
+                              <button type="button" onClick={() => setCalEditingId(null)} style={{ background:"var(--surface2)", border:"1px solid var(--border)", color:"var(--muted)", borderRadius:6, padding:"6px 14px", fontSize:12, cursor:"pointer" }}>
+                                {lang === "tr" ? "İptal" : "Cancel"}
+                              </button>
+                              <button type="button" onClick={() => { deleteEvent(ev.id); setCalEditingId(null); }} style={{ background:"transparent", border:"1px solid rgba(239,68,68,0.4)", color:"#f87171", borderRadius:6, padding:"6px 14px", fontSize:12, cursor:"pointer", marginLeft:"auto" }}>
+                                🗑️ {lang === "tr" ? "Sil" : "Delete"}
+                              </button>
                             </div>
-                          )}
-                        </div>
-                        {ev.countries.length > 0 && (
-                          <div>
-                            <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginBottom:8 }}>
-                              {persuadable.length > 0 ? t(lang,"meet_these_first") : t(lang,"feds_at_event")}
+                          </div>
+                        ) : (
+                          <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:12 }}>
+                            <span style={{ fontSize:22 }}>{ev.emoji}</span>
+                            <div style={{ flex:1 }}>
+                              <div style={{ fontSize:15, fontWeight:700, color:"var(--text)" }}>{ev.label}</div>
+                              <div style={{ fontSize:12, color:"var(--muted)" }}>{ev.date} · {daysLeft > 0 ? `${daysLeft} ${t(lang,"days_left")}` : t(lang,"passed")}</div>
+                              {ev.note && <div style={{ fontSize:11, color:"var(--muted)", marginTop:3, fontStyle:"italic" }}>{ev.note}</div>}
                             </div>
-                            <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
-                              {[...persuadable, ...watch, ...supporters].slice(0,12).map((f:any) => {
-                                const eff = overrides[f.countryCode]?.status || f.status;
-                                const statusColors: Record<string,string> = {supporter:"#10D9A0", persuadable:"#3B82F6", watch:"#F59E0B", resistant:"#EF4444"};
-                                return (
-                                  <span
-                                    key={f.countryCode}
-                                    onClick={() => openDossier(f.countryCode)}
-                                    style={{ fontSize:11, fontWeight:600, color:"#fff", background:statusColors[eff]||"var(--muted)", borderRadius:6, padding:"3px 8px", cursor:"pointer" }}
-                                  >
-                                    {f.countryCode}
-                                  </span>
-                                );
-                              })}
-                            </div>
+                            {ev.countries.length > 0 && (
+                              <div style={{ display:"flex", gap:6 }}>
+                                {persuadable.length > 0 && <span style={{ fontSize:11, background:"rgba(59,130,246,0.2)", color:"#3b82f6", borderRadius:16, padding:"2px 8px", fontWeight:600 }}>{persuadable.length} {t(lang,"event_persuadable")}</span>}
+                                {watch.length > 0 && <span style={{ fontSize:11, background:"rgba(245,158,11,0.2)", color:"#f59e0b", borderRadius:16, padding:"2px 8px", fontWeight:600 }}>{watch.length} {t(lang,"event_watch")}</span>}
+                                {supporters.length > 0 && <span style={{ fontSize:11, background:"rgba(16,217,160,0.2)", color:"#10D9A0", borderRadius:16, padding:"2px 8px", fontWeight:600 }}>{supporters.length} {t(lang,"event_supporter")}</span>}
+                              </div>
+                            )}
+                            <button type="button" onClick={() => { setCalEditingId(ev.id); setCalDraft(ev); }} className="edit-btn" title={lang === "tr" ? "Düzenle" : "Edit"}>
+                              <IcEdit />
+                            </button>
                           </div>
                         )}
-                        {ev.countries.length === 0 && (
-                          <div style={{ textAlign:"center", padding:"8px", color:"var(--accent)", fontWeight:700 }}>{t(lang,"main_target")}</div>
+
+                        {/* Ülke listesi + Ekle butonu */}
+                        {!isEditing && (
+                          <div>
+                            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                              <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)" }}>
+                                {ev.countries.length > 0
+                                  ? (persuadable.length > 0 ? t(lang,"meet_these_first") : t(lang,"feds_at_event"))
+                                  : (lang === "tr" ? "Hedef ülke eklenmedi" : "No target countries")}
+                              </div>
+                              <button type="button" onClick={() => { setCalCountryPicker(isPickerOpen ? null : ev.id); setCalCountrySearch(""); }} style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:6, padding:"3px 10px", fontSize:11, color:"var(--accent)", cursor:"pointer", fontWeight:600 }}>
+                                {isPickerOpen ? (lang === "tr" ? "✕ Kapat" : "✕ Close") : `+ ${lang === "tr" ? "Ülke" : "Country"}`}
+                              </button>
+                            </div>
+                            {ev.countries.length > 0 && (
+                              <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:8 }}>
+                                {[...persuadable, ...watch, ...supporters, ...evFeds.filter(f => !["persuadable","watch","supporter"].includes(overrides[f.countryCode]?.status || f.status))].map((f:any) => {
+                                  const eff = overrides[f.countryCode]?.status || f.status;
+                                  const statusColors: Record<string,string> = {supporter:"#10D9A0", persuadable:"#3B82F6", watch:"#F59E0B", resistant:"#EF4444"};
+                                  return (
+                                    <span
+                                      key={f.countryCode}
+                                      style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:11, fontWeight:600, color:"#fff", background:statusColors[eff]||"var(--muted)", borderRadius:6, padding:"3px 6px 3px 8px" }}
+                                    >
+                                      <span onClick={() => openDossier(f.countryCode)} style={{ cursor:"pointer" }}>{f.countryCode}</span>
+                                      <button type="button" onClick={() => toggleCountry(ev.id, f.countryCode)} style={{ background:"transparent", border:"none", color:"#fff", cursor:"pointer", padding:"0 2px", fontSize:11, opacity:0.7 }} title={lang === "tr" ? "Kaldır" : "Remove"}>✕</button>
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            )}
+
+                            {/* Country picker */}
+                            {isPickerOpen && (
+                              <div style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8, padding:"10px", marginTop:8 }}>
+                                <input
+                                  type="text"
+                                  value={calCountrySearch}
+                                  onChange={e => setCalCountrySearch(e.target.value)}
+                                  placeholder={lang === "tr" ? "🔍 Ülke ara…" : "🔍 Search country…"}
+                                  style={{ width:"100%", background:"var(--surface)", border:"1px solid var(--border)", borderRadius:6, padding:"5px 10px", color:"var(--text)", fontSize:12, marginBottom:8, boxSizing:"border-box" }}
+                                />
+                                <div style={{ maxHeight:200, overflowY:"auto", display:"flex", flexWrap:"wrap", gap:4 }}>
+                                  {pickerList.slice(0,100).map(f => {
+                                    const has = ev.countries.includes(f.countryCode);
+                                    return (
+                                      <button
+                                        key={f.countryCode}
+                                        type="button"
+                                        onClick={() => toggleCountry(ev.id, f.countryCode)}
+                                        style={{
+                                          background: has ? "var(--accent)" : "var(--surface)",
+                                          color: has ? "#fff" : "var(--text)",
+                                          border:`1px solid ${has ? "var(--accent)" : "var(--border)"}`,
+                                          borderRadius:5, padding:"3px 8px", fontSize:11, cursor:"pointer", fontWeight:600,
+                                        }}
+                                        title={trName(f)}
+                                      >
+                                        {has ? "✓ " : ""}{f.countryCode}
+                                      </button>
+                                    );
+                                  })}
+                                  {pickerList.length === 0 && (
+                                    <div style={{ width:"100%", textAlign:"center", color:"var(--muted)", fontSize:12, padding:"10px" }}>
+                                      {lang === "tr" ? "Eşleşme yok" : "No matches"}
+                                    </div>
+                                  )}
+                                </div>
+                                {pickerList.length > 100 && (
+                                  <div style={{ fontSize:10, color:"var(--muted)", marginTop:6, textAlign:"center" }}>
+                                    {lang === "tr" ? `İlk 100 gösteriliyor (toplam ${pickerList.length}). Daha hassas arama yapın.` : `Showing first 100 (total ${pickerList.length}). Refine search.`}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {ev.countries.length === 0 && !isPickerOpen && ev.id === "e_congress" && (
+                              <div style={{ textAlign:"center", padding:"8px", color:"var(--accent)", fontWeight:700 }}>{t(lang,"main_target")}</div>
+                            )}
+                          </div>
                         )}
                       </div>
                     );

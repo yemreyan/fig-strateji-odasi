@@ -719,7 +719,16 @@ const AppMain = () => {
       const val = snap.val();
       if (val && typeof val === "object") {
         // Firebase returns object keyed by id → convert to array
-        const arr = Object.values(val) as CalEvent[];
+        // ÖNEMLI: Firebase boş array'leri saklamaz, geri okurken countries undefined olabilir
+        // Bu yüzden normalize ediyoruz.
+        const arr = (Object.values(val) as any[]).map(e => ({
+          id: e?.id ?? "",
+          date: e?.date ?? "",
+          label: e?.label ?? "",
+          emoji: e?.emoji ?? "📅",
+          countries: Array.isArray(e?.countries) ? e.countries : [],
+          note: e?.note ?? "",
+        })) as CalEvent[];
         setCalendarEvents(arr);
       } else {
         setCalendarEvents([]); // empty array (no events yet)

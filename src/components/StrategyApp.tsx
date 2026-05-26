@@ -56,7 +56,8 @@ import type {
 } from "../types";
 
 // ── Types ─────────────────────────────────────────────────────────────
-type AppView = "dashboard" | "map" | "countries" | "vaatler" | "notes";
+type AppView = "dashboard" | "map" | "countries" | "vaatler" | "notes" | "savaş-odası" | "takvim" | "kongre-şehri";
+type CityVote = "istanbul" | "roma" | "kararsız" | "bilinmiyor";
 type Sheet = "dossier" | null;
 type FilterValue<T extends string> = T | "all";
 type DossierTab = "genel" | "mesaj" | "iletisim" | "branşlar" | "istihbarat";
@@ -72,6 +73,11 @@ type CountryOverride = {
   entryChannel?: string;
   redLine?: string;
   presidentPhone?: string;
+  commitmentLevel?: number;
+  congressAttendance?: string;
+  attendanceNote?: string;
+  cityVote?: CityVote;
+  cityVoteNote?: string;
 };
 
 const officialDirectory = federationDirectoryData as FederationDirectoryRecord[];
@@ -594,6 +600,17 @@ const AppMain = () => {
   const [contactActor, setContactActor] = useState("Suat Çelen");
   const [contactSummary, setContactSummary] = useState("");
   const [contactNextStep, setContactNextStep] = useState("");
+  const [contactObjections, setContactObjections] = useState<string[]>([]);
+
+  // Feature: Risk Register
+  const [risks, setRisks] = useState<Record<string, any[]>>({});
+
+  // Feature: Simulator 2.0
+  const [continentSliders, setContinentSliders] = useState<Record<string,number>>({EG:0,AGU:0,UAG:0,PAGU:0,OGU:0});
+  const [scenarioName, setScenarioName] = useState("Mevcut");
+
+  // Feature: City Vote (Istanbul vs Roma)
+  const [cityFilter, setCityFilter] = useState<"all"|"istanbul"|"roma"|"kararsız"|"bilinmiyor">("all");
 
   // Firebase listeners
   useEffect(() => {
@@ -671,6 +688,13 @@ const AppMain = () => {
       setCompetitor(snap.val() || null);
     });
     return compUnsub;
+  }, []);
+
+  useEffect(() => {
+    const risksUnsub = onValue(ref(db, "fig-v3/risks"), snap => {
+      setRisks(snap.val() || {});
+    });
+    return risksUnsub;
   }, []);
 
   // Harita dışına çıkınca mapPreview sıfırla
@@ -757,12 +781,14 @@ const AppMain = () => {
       channel: contactChannel,
       summary: contactSummary.trim(),
       nextStep: contactNextStep.trim(),
+      ...(contactObjections.length > 0 ? { objections: contactObjections } : {}),
     };
     const key = `${Date.now()}`;
     set(ref(db, `fig-v3/contactLogs/${selectedCode}/${key}`), entry);
     setShowContactForm(false);
     setContactSummary("");
     setContactNextStep("");
+    setContactObjections([]);
   };
   const deleteContactLog = (code: string, key: string) =>
     remove(ref(db, `fig-v3/contactLogs/${code}/${key}`));
@@ -1017,9 +1043,9 @@ const AppMain = () => {
           </div>
         </div>
         <nav className="hdr-nav">
-          {(["dashboard","map","countries","vaatler","notes"] as AppView[]).map(v => {
-            const labels: Record<AppView,string> = { dashboard:t(lang,"nav_dashboard"), map:t(lang,"nav_map"), countries:t(lang,"nav_countries"), vaatler:t(lang,"nav_promises"), notes:t(lang,"nav_notes") };
-            const icons: Record<AppView, React.ReactElement> = { dashboard:<IcGrid/>, map:<IcMap/>, countries:<IcGlobe/>, vaatler:<IcHandshake/>, notes:<IcNote/> };
+          {(["dashboard","savaş-odası","map","countries","vaatler","notes","takvim","kongre-şehri"] as AppView[]).map(v => {
+            const labels: Record<AppView,string> = { dashboard:t(lang,"nav_dashboard"), map:t(lang,"nav_map"), countries:t(lang,"nav_countries"), vaatler:t(lang,"nav_promises"), notes:t(lang,"nav_notes"), "savaş-odası":"⚔️ Savaş Odası", takvim:"📅 Takvim", "kongre-şehri":"🏛️ Kongre Şehri" };
+            const icons: Record<AppView, React.ReactElement> = { dashboard:<IcGrid/>, map:<IcMap/>, countries:<IcGlobe/>, vaatler:<IcHandshake/>, notes:<IcNote/>, "savaş-odası":<IcGrid/>, takvim:<IcNote/>, "kongre-şehri":<IcGlobe/> };
             return (
               <button key={v} className={`hdr-tab ${view===v?"active":""}`} onClick={() => setView(v)} type="button">
                 {icons[v]}{labels[v]}
@@ -1039,9 +1065,9 @@ const AppMain = () => {
 
       {/* ── Bottom Nav ── */}
       <nav className="bottom-nav">
-        {(["dashboard","map","countries","vaatler","notes"] as AppView[]).map(v => {
-          const labels: Record<AppView,string> = { dashboard:t(lang,"nav_dashboard"), map:t(lang,"nav_map"), countries:t(lang,"nav_countries"), vaatler:t(lang,"nav_promises"), notes:t(lang,"nav_notes") };
-          const icons: Record<AppView, React.ReactElement> = { dashboard:<IcGrid/>, map:<IcMap/>, countries:<IcGlobe/>, vaatler:<IcHandshake/>, notes:<IcNote/> };
+        {(["dashboard","savaş-odası","map","countries","vaatler","notes","takvim","kongre-şehri"] as AppView[]).map(v => {
+          const labels: Record<AppView,string> = { dashboard:t(lang,"nav_dashboard"), map:t(lang,"nav_map"), countries:t(lang,"nav_countries"), vaatler:t(lang,"nav_promises"), notes:t(lang,"nav_notes"), "savaş-odası":"⚔️ Savaş", takvim:"📅 Takvim", "kongre-şehri":"🏛️ Şehir" };
+          const icons: Record<AppView, React.ReactElement> = { dashboard:<IcGrid/>, map:<IcMap/>, countries:<IcGlobe/>, vaatler:<IcHandshake/>, notes:<IcNote/>, "savaş-odası":<IcGrid/>, takvim:<IcNote/>, "kongre-şehri":<IcGlobe/> };
           return (
             <button key={v} type="button" className={`nav-tab ${view===v?"active":""}`} onClick={() => { setView(v); setSheet(null); }}>
               <span className="nav-tab-icon">{icons[v]}</span>
@@ -1062,6 +1088,32 @@ const AppMain = () => {
                 <span style={{ fontSize:16, fontWeight:600, color:"var(--muted)" }}>gün kaldı</span>
               </div>
               <div style={{ fontSize:13, fontWeight:600, color:"var(--text)", marginTop:4 }}>⏱ FIG Kongresi · Ekim 2026</div>
+
+              {/* Kongre Şehri Mini Özet */}
+              {(() => {
+                const ist = Object.values(overrides).filter((o:any) => o?.cityVote === "istanbul").length;
+                const rom = Object.values(overrides).filter((o:any) => o?.cityVote === "roma").length;
+                const total = ist + rom;
+                if (total === 0) return null;
+                const iPct = Math.round((ist / total) * 100);
+                return (
+                  <div onClick={() => setView("kongre-şehri")} style={{ marginTop:12, padding:"10px 12px", background:"var(--surface2)", borderRadius:8, cursor:"pointer" }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
+                      <span style={{ fontSize:11, fontWeight:700, color:"var(--muted)", letterSpacing:"0.05em" }}>🏛️ KONGRE ŞEHRİ</span>
+                      <span style={{ fontSize:11, color:"var(--accent)" }}>Detay →</span>
+                    </div>
+                    <div style={{ display:"flex", height:10, borderRadius:5, overflow:"hidden", background:"var(--border)", marginBottom:5 }}>
+                      <div style={{ width:`${iPct}%`, background:"#0ea5e9" }} />
+                      <div style={{ width:`${100-iPct}%`, background:"#dc2626" }} />
+                    </div>
+                    <div style={{ display:"flex", justifyContent:"space-between", fontSize:11 }}>
+                      <span style={{ color:"#0ea5e9", fontWeight:700 }}>🇹🇷 İstanbul {ist}</span>
+                      <span style={{ color:"#dc2626", fontWeight:700 }}>{rom} Roma 🇮🇹</span>
+                    </div>
+                  </div>
+                );
+              })()}
+
               <div style={{ marginTop:14, borderTop:"1px solid var(--border)", paddingTop:12 }}>
                 <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginBottom:8, letterSpacing:"0.05em" }}>KRİTİK TARİHLER</div>
                 {KEY_EVENTS.map(ev => (
@@ -1180,8 +1232,120 @@ const AppMain = () => {
                   <span className="dot amber"/><b>{totals.watch}</b> {t(lang,"status_watch")}
                   <span className="dot red"/><b>{totals.resistant}</b> {t(lang,"status_resistant")}
                 </div>
+
+                {/* FEATURE 1: Gerçek Taahhüt Dağılımı */}
+                {(() => {
+                  const committed5 = Object.entries(overrides).filter(([,o]: any) => o.commitmentLevel >= 5).length;
+                  const committed6 = Object.entries(overrides).filter(([,o]: any) => o.commitmentLevel === 6).length;
+                  if (committed5 === 0) return null;
+                  return (
+                    <div style={{ display:"flex", gap:12, marginTop:8, flexWrap:"wrap" }}>
+                      <span style={{ fontSize:12, color:"#0d9488" }}>✅ Kesin taahhüt: <strong>{committed5}</strong></span>
+                      {committed6 > 0 && <span style={{ fontSize:12, color:"#7c3aed" }}>🏆 Yazılı taahhüt: <strong>{committed6}</strong></span>}
+                    </div>
+                  );
+                })()}
+
+                {/* FEATURE 2: Gerçek Oy Tahmini */}
+                {(() => {
+                  const realVotes = Object.entries(overrides).filter(([code, o]: any) => {
+                    const lvl = o.commitmentLevel ?? 1;
+                    const att = o.congressAttendance ?? "unknown";
+                    const isSupporter = o.status === "supporter" ||
+                      (!o.status && federationSeeds.find((f:any) => f.countryCode === code)?.status === "supporter");
+                    return isSupporter && lvl >= 4 && ["confirmed","likely"].includes(att);
+                  }).length;
+                  return (
+                    <div style={{ marginTop:6, padding:"8px 12px", background:"rgba(16,163,127,0.1)", border:"1px solid rgba(16,163,127,0.3)", borderRadius:8 }}>
+                      <span style={{ fontSize:11, color:"var(--muted)" }}>✈️ Gerçek oy tahmini (katılım × taahhüt): </span>
+                      <strong style={{ fontSize:16, color:"#10a37f" }}>{realVotes}</strong>
+                    </div>
+                  );
+                })()}
               </div>
             </section>
+
+            {/* FEATURE 5: Risk Warning */}
+            {(() => {
+              const highRisks = Object.entries(risks).filter(([code, rList]: any) => {
+                const isSup = overrides[code]?.status === "supporter" || federationSeeds.find((f:any)=>f.countryCode===code)?.status === "supporter";
+                return isSup && rList?.some((r:any) => !r.resolved && r.severity === "high");
+              });
+              if (highRisks.length === 0) return null;
+              return (
+                <div className="section" style={{ paddingTop:0 }}>
+                  <div style={{ background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.3)", borderRadius:10, padding:"10px 14px", marginBottom:12 }}>
+                    <span style={{ fontSize:12, color:"#f87171", fontWeight:700 }}>⚠️ {highRisks.length} destekçi ülkede çözülmemiş yüksek risk</span>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* FEATURE 4: İtiraz Analizi */}
+            {(() => {
+              const objCounts: Record<string,number> = {};
+              Object.values(contactLogs).forEach((logs: any) => {
+                if (!logs) return;
+                logs.forEach((l: any) => {
+                  (l.objections || []).forEach((obj: string) => {
+                    objCounts[obj] = (objCounts[obj] || 0) + 1;
+                  });
+                });
+              });
+              const sorted = Object.entries(objCounts).sort((a,b) => b[1]-a[1]).slice(0,4);
+              if (sorted.length === 0) return null;
+              const maxCount = sorted[0][1];
+              return (
+                <section className="section">
+                  <div style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, padding:"14px 16px", marginBottom:16 }}>
+                    <div style={{ fontSize:13, fontWeight:700, color:"var(--text)", marginBottom:12 }}>🚧 İtiraz Analizi</div>
+                    {sorted.map(([obj, count]) => (
+                      <div key={obj} style={{ marginBottom:8 }}>
+                        <div style={{ display:"flex", justifyContent:"space-between", marginBottom:3 }}>
+                          <span style={{ fontSize:11, color:"var(--text)" }}>{obj}</span>
+                          <span style={{ fontSize:11, color:"var(--muted)", fontWeight:600 }}>{count}</span>
+                        </div>
+                        <div style={{ height:6, background:"var(--surface2)", borderRadius:3, overflow:"hidden" }}>
+                          <div style={{ width:`${(count/maxCount)*100}%`, height:"100%", background:"#f59e0b", borderRadius:3 }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              );
+            })()}
+
+            {/* FEATURE 6: Etki Merkezleri */}
+            {(() => {
+              const allyCounts: Record<string, number> = {};
+              federationSeeds.forEach((f: any) => {
+                (f.relationshipNetwork || []).filter((r: any) => r.kind === "ally").forEach(() => {
+                  allyCounts[f.countryCode] = (allyCounts[f.countryCode] || 0) + 1;
+                });
+              });
+              const top5 = Object.entries(allyCounts).sort((a,b) => b[1]-a[1]).slice(0,5);
+              if (top5.length === 0) return null;
+              return (
+                <section className="section">
+                  <div style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, padding:"14px 16px", marginBottom:16 }}>
+                    <div style={{ fontSize:13, fontWeight:700, color:"var(--text)", marginBottom:10 }}>📡 Etki Merkezleri</div>
+                    {top5.map(([code, count]) => {
+                      const fed = mergedByCode[code];
+                      const eff = fed?.status;
+                      const statusColors: Record<string,string> = {supporter:"#10D9A0", persuadable:"#3B82F6", watch:"#F59E0B", resistant:"#EF4444"};
+                      return (
+                        <div key={code} onClick={() => openDossier(code)} style={{ display:"flex", alignItems:"center", gap:10, padding:"5px 0", borderBottom:"1px solid var(--border)", cursor:"pointer" }}>
+                          <span style={{ width:8, height:8, borderRadius:"50%", background:statusColors[(eff ?? "")]||"var(--muted)", flexShrink:0 }} />
+                          <span style={{ fontSize:12, fontWeight:700, color:"var(--accent)", minWidth:36 }}>{code}</span>
+                          <span style={{ fontSize:12, color:"var(--text)", flex:1 }}>{fed ? trName(fed) : code}</span>
+                          <span style={{ fontSize:11, color:"#4ade80", fontWeight:600 }}>+{count} müttefik</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              );
+            })()}
 
             <section className="section">
               <h2 className="section-title">{t(lang,"continents_title")}</h2>
@@ -1265,6 +1429,64 @@ const AppMain = () => {
                     %33 → {totals.supporter + Math.round(totals.persuadable * 0.33)} {lang === "tr" ? "oy" : "votes"}
                     {totals.supporter + Math.round(totals.persuadable * 0.33) >= majority ? " ✓" : ` (${majority - totals.supporter - Math.round(totals.persuadable * 0.33)} ${lang === "tr" ? "eksik" : "short"})`}
                   </div>
+                </div>
+
+                {/* FEATURE 8: Simülatör 2.0 — Kıta Bazlı */}
+                <div style={{ marginTop:12, paddingTop:12, borderTop:"1px solid var(--border)" }}>
+                  <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginBottom:10, letterSpacing:"0.05em" }}>KIITA BAZLI DÖNÜŞÜM</div>
+                  {[{code:"EG",label:"🇪🇺 Avrupa"},{code:"AGU",label:"🌏 Asya"},{code:"UAG",label:"🌍 Afrika"},{code:"PAGU",label:"🌎 Amerika"},{code:"OGU",label:"🌊 Okyanusya"}].map(({code, label}) => {
+                    const targets = federationSeeds.filter((f:any) => f.continent === code && ["watch","persuadable"].includes(overrides[f.countryCode]?.status || f.status));
+                    const val = continentSliders[code] || 0;
+                    const converted = Math.round(targets.length * val / 100);
+                    return (
+                      <div key={code} style={{ marginBottom:10 }}>
+                        <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                          <span style={{ fontSize:11, color:"var(--text)" }}>{label}</span>
+                          <span style={{ fontSize:11, color:"var(--accent)", fontWeight:600 }}>+{converted} / {targets.length} hedef</span>
+                        </div>
+                        <input
+                          type="range" min={0} max={100} value={val}
+                          onChange={e => setContinentSliders(p => ({...p, [code]: Number(e.target.value)}))}
+                          style={{ width:"100%", accentColor:"var(--accent)" }}
+                        />
+                      </div>
+                    );
+                  })}
+                  <div style={{ display:"flex", gap:6, marginTop:8 }}>
+                    {[
+                      {label:"😰 En Kötü", vals:{EG:5,AGU:5,UAG:5,PAGU:5,OGU:5}},
+                      {label:"📊 Mevcut", vals:{EG:30,AGU:25,UAG:40,PAGU:35,OGU:50}},
+                      {label:"😊 Optimist", vals:{EG:60,AGU:50,UAG:70,PAGU:65,OGU:80}},
+                    ].map(preset => (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        onClick={() => { setContinentSliders(preset.vals); setScenarioName(preset.label); }}
+                        style={{ flex:1, background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:6, padding:"6px 4px", fontSize:10, color:"var(--text)", cursor:"pointer", fontWeight:600 }}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                  {(() => {
+                    let extraVotes = 0;
+                    (["EG","AGU","UAG","PAGU","OGU"] as const).forEach(code => {
+                      const targets = federationSeeds.filter((f:any) => f.continent === code && ["watch","persuadable"].includes(overrides[f.countryCode]?.status || f.status));
+                      extraVotes += Math.round(targets.length * (continentSliders[code]||0) / 100);
+                    });
+                    const base = federationSeeds.filter((f:any) => (overrides[f.countryCode]?.status || f.status) === "supporter").length;
+                    const total = base + extraVotes;
+                    const maj = Math.ceil(federationSeeds.length / 2) + 1;
+                    return (
+                      <div style={{ marginTop:10, padding:"10px 12px", background: total >= maj ? "rgba(16,163,127,0.12)" : "rgba(239,68,68,0.08)", border:`1px solid ${total >= maj ? "rgba(16,163,127,0.4)" : "rgba(239,68,68,0.3)"}`, borderRadius:8, textAlign:"center" }}>
+                        <div style={{ fontSize:22, fontWeight:800, color: total >= maj ? "#10a37f" : "#f87171" }}>{total}</div>
+                        <div style={{ fontSize:11, color:"var(--muted)" }}>{scenarioName} senaryo · Çoğunluk: {maj}</div>
+                        <div style={{ fontSize:11, color: total >= maj ? "#4ade80" : "#f87171", fontWeight:600, marginTop:2 }}>
+                          {total >= maj ? `✅ +${total - maj} fazla` : `❌ ${maj - total} eksik`}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             </section>
@@ -1435,6 +1657,23 @@ const AppMain = () => {
                 <div className="country-card-right">
                   <span className={`badge ${STATUS_CSS[c.status]}`}>{t(lang,`status_${c.status}`)}</span>
                   <span className="country-card-score">{fmtScore(c.priorityScore)}</span>
+                  {/* FEATURE 1: Commitment dot */}
+                  {overrides[c.countryCode]?.commitmentLevel && (
+                    <span className="commitment-dot" data-level={overrides[c.countryCode].commitmentLevel}>
+                      {(["🔵","🟡","🟠","🟢","✅","🏆"] as const)[(overrides[c.countryCode].commitmentLevel as number) - 1]}
+                    </span>
+                  )}
+                  {/* FEATURE 2: Attendance icon */}
+                  {(() => {
+                    const att = overrides[c.countryCode]?.congressAttendance;
+                    if (!att || att === "unknown") return null;
+                    const icons: Record<string,string> = {confirmed:"✈️", likely:"🟢", uncertain:"❓", no:"✗"};
+                    return <span style={{ fontSize:11 }}>{icons[att as string]}</span>;
+                  })()}
+                  {/* FEATURE 5: Risk badge */}
+                  {risks[c.countryCode]?.some((r:any) => !r.resolved && r.severity === "high") && (
+                    <span style={{ fontSize:11 }}>⚠️</span>
+                  )}
                   {(c.facilityScore ?? 0) > 0 && (
                     <div className="card-facility-mini" title={`${t(lang,"facilities_lbl")}: ${c.facilityScore}/100`}>
                       <div className="card-facility-fill" style={{ width: `${c.facilityScore}%` }} />
@@ -1705,6 +1944,427 @@ const AppMain = () => {
             })()}
           </div>
         )}
+
+        {/* ══ SAVAŞ ODASI ══ */}
+        {view === "savaş-odası" && (() => {
+          const today = new Date();
+          const sevenDaysAgo = new Date(today.getTime() - 7*24*60*60*1000).toISOString().slice(0,10);
+          const fourteenDaysAgo = new Date(today.getTime() - 14*24*60*60*1000).toISOString().slice(0,10);
+          const thisWeekStart = new Date(today.getTime() - 7*24*60*60*1000).toISOString().slice(0,10);
+
+          const lastContact: Record<string, string> = {};
+          Object.entries(contactLogs).forEach(([code, logs]) => {
+            if (logs && logs.length > 0) {
+              const sorted = [...logs].sort((a,b) => b.date.localeCompare(a.date));
+              lastContact[code] = sorted[0].date;
+            }
+          });
+
+          const allFeds = federationSeeds.map((f: any) => ({ ...f, ...(overrides[f.countryCode] || {}) }));
+
+          const urgentPersuadable = allFeds.filter((f: any) => {
+            const eff = overrides[f.countryCode]?.status || f.status;
+            return eff === "persuadable" && (!lastContact[f.countryCode] || lastContact[f.countryCode] < sevenDaysAgo);
+          }).sort((a:any, b:any) => (lastContact[a.countryCode] || "0").localeCompare(lastContact[b.countryCode] || "0"));
+
+          const warningWatch = allFeds.filter((f: any) => {
+            const eff = overrides[f.countryCode]?.status || f.status;
+            return eff === "watch" && (!lastContact[f.countryCode] || lastContact[f.countryCode] < fourteenDaysAgo);
+          }).sort((a:any, b:any) => (lastContact[a.countryCode] || "0").localeCompare(lastContact[b.countryCode] || "0"));
+
+          const nextSteps: {code: string, name: string, nextStep: string, date: string}[] = [];
+          Object.entries(contactLogs).forEach(([code, logs]) => {
+            if (logs && logs.length > 0) {
+              const sorted = [...logs].sort((a:any,b:any) => b.date.localeCompare(a.date));
+              const latest = sorted[0];
+              if (latest.nextStep && latest.nextStep.trim()) {
+                const fed = federationSeeds.find((f:any) => f.countryCode === code);
+                nextSteps.push({ code, name: fed ? trName(fed) : code, nextStep: latest.nextStep, date: latest.date });
+              }
+            }
+          });
+          nextSteps.sort((a,b) => b.date.localeCompare(a.date));
+
+          const lastWeekStart = new Date(today.getTime() - 14*24*60*60*1000).toISOString().slice(0,10);
+          let thisWeekCount = 0, lastWeekCount = 0;
+          const channelCounts: Record<string,number> = {desk:0, email:0, call:0, visit:0};
+          Object.values(contactLogs).forEach((logs: any) => {
+            if (!logs) return;
+            logs.forEach((l: any) => {
+              if (l.date >= thisWeekStart) { thisWeekCount++; if (l.channel) channelCounts[l.channel] = (channelCounts[l.channel]||0)+1; }
+              else if (l.date >= lastWeekStart) lastWeekCount++;
+            });
+          });
+          const totalChannels = Object.values(channelCounts).reduce((a,b) => a+b, 0);
+
+          return (
+            <div className="tab-scroll">
+              <div style={{ padding:"24px 20px", maxWidth:1100, margin:"0 auto" }}>
+                <h2 style={{ fontSize:22, fontWeight:800, color:"var(--text)", marginBottom:4 }}>⚔️ Savaş Odası</h2>
+                <p style={{ fontSize:13, color:"var(--muted)", marginBottom:24 }}>Bugün ne yapmalısın?</p>
+                <div className="war-room-grid">
+                  <div>
+                    {urgentPersuadable.length > 0 && (
+                      <div style={{ background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.3)", borderRadius:12, padding:"16px", marginBottom:16 }}>
+                        <div style={{ fontSize:13, fontWeight:700, color:"#f87171", marginBottom:12 }}>🔴 Acil — İkna Edilebilir (7 gün temas yok)</div>
+                        {urgentPersuadable.slice(0,8).map((f: any) => (
+                          <div key={f.countryCode} onClick={() => openDossier(f.countryCode)} style={{ display:"flex", alignItems:"center", gap:10, padding:"6px 0", borderBottom:"1px solid rgba(239,68,68,0.15)", cursor:"pointer" }}>
+                            <span style={{ fontSize:12, fontWeight:700, color:"var(--accent)", minWidth:36 }}>{f.countryCode}</span>
+                            <span style={{ fontSize:12, color:"var(--text)", flex:1 }}>{trName(f)}</span>
+                            <span style={{ fontSize:10, color:"var(--muted)" }}>{lastContact[f.countryCode] ? lastContact[f.countryCode] : "Hiç temas yok"}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {warningWatch.length > 0 && (
+                      <div style={{ background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.3)", borderRadius:12, padding:"16px", marginBottom:16 }}>
+                        <div style={{ fontSize:13, fontWeight:700, color:"#fbbf24", marginBottom:12 }}>🟡 Takipte — İzleme (14 gün temas yok)</div>
+                        {warningWatch.slice(0,6).map((f: any) => (
+                          <div key={f.countryCode} onClick={() => openDossier(f.countryCode)} style={{ display:"flex", alignItems:"center", gap:10, padding:"6px 0", borderBottom:"1px solid rgba(245,158,11,0.15)", cursor:"pointer" }}>
+                            <span style={{ fontSize:12, fontWeight:700, color:"var(--accent)", minWidth:36 }}>{f.countryCode}</span>
+                            <span style={{ fontSize:12, color:"var(--text)", flex:1 }}>{trName(f)}</span>
+                            <span style={{ fontSize:10, color:"var(--muted)" }}>{lastContact[f.countryCode] || "Hiç temas yok"}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {urgentPersuadable.length === 0 && warningWatch.length === 0 && (
+                      <div style={{ background:"rgba(16,163,127,0.08)", border:"1px solid rgba(16,163,127,0.3)", borderRadius:12, padding:"24px 16px", textAlign:"center" }}>
+                        <div style={{ fontSize:24, marginBottom:8 }}>✅</div>
+                        <div style={{ fontSize:13, color:"#10a37f", fontWeight:600 }}>Tüm hedef ülkelerle güncel temas var!</div>
+                      </div>
+                    )}
+                    {nextSteps.length > 0 && (
+                      <div style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, padding:"16px", marginTop:16 }}>
+                        <div style={{ fontSize:13, fontWeight:700, color:"var(--text)", marginBottom:12 }}>📋 Sonraki Adımlar</div>
+                        {nextSteps.slice(0,6).map((ns, i) => (
+                          <div key={i} style={{ padding:"8px 0", borderBottom:"1px solid var(--border)" }}>
+                            <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:3 }}>
+                              <span style={{ fontSize:11, fontWeight:700, color:"var(--accent)" }}>{ns.code}</span>
+                              <span style={{ fontSize:11, color:"var(--muted)" }}>{ns.date}</span>
+                            </div>
+                            <div style={{ fontSize:12, color:"var(--text)" }}>{ns.nextStep}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <div style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, padding:"16px", marginBottom:16 }}>
+                      <div style={{ fontSize:13, fontWeight:700, color:"var(--text)", marginBottom:16 }}>📊 Temas Hızı</div>
+                      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:16 }}>
+                        <div style={{ textAlign:"center", padding:"12px", background:"var(--surface2)", borderRadius:8 }}>
+                          <div style={{ fontSize:28, fontWeight:800, color:"var(--accent)" }}>{thisWeekCount}</div>
+                          <div style={{ fontSize:11, color:"var(--muted)" }}>Bu hafta</div>
+                        </div>
+                        <div style={{ textAlign:"center", padding:"12px", background:"var(--surface2)", borderRadius:8 }}>
+                          <div style={{ fontSize:28, fontWeight:800, color:"var(--muted)" }}>{lastWeekCount}</div>
+                          <div style={{ fontSize:11, color:"var(--muted)" }}>Geçen hafta</div>
+                          {lastWeekCount > 0 && (
+                            <div style={{ fontSize:10, color: thisWeekCount >= lastWeekCount ? "#4ade80" : "#f87171" }}>
+                              {thisWeekCount >= lastWeekCount ? "▲" : "▼"} {Math.abs(thisWeekCount - lastWeekCount)} fark
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      {totalChannels > 0 && (
+                        <div>
+                          <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginBottom:8 }}>KANAL DAĞILIMI (Bu Hafta)</div>
+                          {Object.entries(channelCounts).filter(([,v]) => v > 0).map(([channel, count]) => (
+                            <div key={channel} style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
+                              <span style={{ fontSize:11, color:"var(--muted)", minWidth:70 }}>{{desk:"🖥️ Masa",email:"📧 E-posta",call:"📞 Arama",visit:"🤝 Ziyaret"}[channel as "desk"|"email"|"call"|"visit"] || channel}</span>
+                              <div style={{ flex:1, height:8, background:"var(--border)", borderRadius:4, overflow:"hidden" }}>
+                                <div style={{ width:`${(count/totalChannels)*100}%`, height:"100%", background:"var(--accent)", borderRadius:4 }} />
+                              </div>
+                              <span style={{ fontSize:11, color:"var(--text)", fontWeight:600 }}>{count}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, padding:"16px" }}>
+                      <div style={{ fontSize:13, fontWeight:700, color:"var(--text)", marginBottom:12 }}>⏰ En Uzun Bekleyen Hedefler</div>
+                      {allFeds
+                        .filter((f:any) => ["persuadable","watch"].includes(overrides[f.countryCode]?.status || f.status))
+                        .sort((a:any,b:any) => (lastContact[a.countryCode]||"0").localeCompare(lastContact[b.countryCode]||"0"))
+                        .slice(0,5)
+                        .map((f:any) => {
+                          const eff = overrides[f.countryCode]?.status || f.status;
+                          return (
+                            <div key={f.countryCode} onClick={() => openDossier(f.countryCode)} style={{ display:"flex", alignItems:"center", gap:10, padding:"6px 0", borderBottom:"1px solid var(--border)", cursor:"pointer" }}>
+                              <span className={`status-dot status-${eff}`} />
+                              <span style={{ fontSize:12, fontWeight:700, color:"var(--accent)", minWidth:36 }}>{f.countryCode}</span>
+                              <span style={{ fontSize:12, color:"var(--text)", flex:1 }}>{trName(f)}</span>
+                              <span style={{ fontSize:10, color:"var(--muted)" }}>{lastContact[f.countryCode] || "—"}</span>
+                            </div>
+                          );
+                        })
+                      }
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ══ TAKVİM ══ */}
+        {view === "takvim" && (() => {
+          const KEY_EVENTS_WITH_COUNTRIES = [
+            { date:"2026-06-15", label:"Dünya Kupası — Doha", emoji:"🏆", countries:["QAT","KUW","BRN","UAE","EGY","JOR","OMA","IRQ"] },
+            { date:"2026-07-20", label:"Pan-Amerikan Şampiyonası", emoji:"🌎", countries:["BRA","ARG","COL","CHI","MEX","PER","VEN","URU"] },
+            { date:"2026-08-10", label:"Afrika Kupası", emoji:"🌍", countries:["EGY","MAR","RSA","SEN","NGR","ETH","CMR","GHA"] },
+            { date:"2026-09-05", label:"Asya Şampiyonası", emoji:"🌏", countries:["JPN","CHN","KOR","INA","THA","PHI","IND","MAS"] },
+            { date:"2026-09-25", label:"Avrupa Şampiyonası", emoji:"🇪🇺", countries:["GER","FRA","ITA","ESP","GBR","NED","SUI","BEL"] },
+            { date:"2026-10-01", label:"FIG Kongresi — Seçim", emoji:"🗳️", countries:[] },
+          ];
+
+          const allFeds = federationSeeds.map((f:any) => ({...f, ...(overrides[f.countryCode]||{})}));
+
+          return (
+            <div className="tab-scroll">
+              <div style={{ padding:"24px 20px", maxWidth:900, margin:"0 auto" }}>
+                <h2 style={{ fontSize:22, fontWeight:800, color:"var(--text)", marginBottom:4 }}>📅 Kampanya Takvimi</h2>
+                <p style={{ fontSize:13, color:"var(--muted)", marginBottom:24 }}>Hangi etkinlikte kime odaklanmalısın?</p>
+                <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+                  {KEY_EVENTS_WITH_COUNTRIES.map(ev => {
+                    const evFeds = ev.countries.map(code => allFeds.find((f:any) => f.countryCode === code)).filter(Boolean) as any[];
+                    const persuadable = evFeds.filter((f:any) => (overrides[f.countryCode]?.status||f.status) === "persuadable");
+                    const watch = evFeds.filter((f:any) => (overrides[f.countryCode]?.status||f.status) === "watch");
+                    const supporters = evFeds.filter((f:any) => (overrides[f.countryCode]?.status||f.status) === "supporter");
+                    const daysLeft = Math.max(0, Math.ceil((new Date(ev.date).getTime() - Date.now()) / (1000*60*60*24)));
+                    return (
+                      <div key={ev.date} style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, padding:"16px 18px" }}>
+                        <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:12 }}>
+                          <span style={{ fontSize:22 }}>{ev.emoji}</span>
+                          <div style={{ flex:1 }}>
+                            <div style={{ fontSize:15, fontWeight:700, color:"var(--text)" }}>{ev.label}</div>
+                            <div style={{ fontSize:12, color:"var(--muted)" }}>{ev.date} · {daysLeft > 0 ? `${daysLeft} gün kaldı` : "Geçti"}</div>
+                          </div>
+                          {ev.countries.length > 0 && (
+                            <div style={{ display:"flex", gap:6 }}>
+                              {persuadable.length > 0 && <span style={{ fontSize:11, background:"rgba(59,130,246,0.2)", color:"#3b82f6", borderRadius:16, padding:"2px 8px", fontWeight:600 }}>{persuadable.length} ikna</span>}
+                              {watch.length > 0 && <span style={{ fontSize:11, background:"rgba(245,158,11,0.2)", color:"#f59e0b", borderRadius:16, padding:"2px 8px", fontWeight:600 }}>{watch.length} izleme</span>}
+                              {supporters.length > 0 && <span style={{ fontSize:11, background:"rgba(16,217,160,0.2)", color:"#10D9A0", borderRadius:16, padding:"2px 8px", fontWeight:600 }}>{supporters.length} destekçi</span>}
+                            </div>
+                          )}
+                        </div>
+                        {ev.countries.length > 0 && (
+                          <div>
+                            <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginBottom:8 }}>
+                              {persuadable.length > 0 ? "🎯 Önce Bunlarla Görüş:" : "Bu etkinlikteki federasyonlar:"}
+                            </div>
+                            <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+                              {[...persuadable, ...watch, ...supporters].slice(0,12).map((f:any) => {
+                                const eff = overrides[f.countryCode]?.status || f.status;
+                                const statusColors: Record<string,string> = {supporter:"#10D9A0", persuadable:"#3B82F6", watch:"#F59E0B", resistant:"#EF4444"};
+                                return (
+                                  <span
+                                    key={f.countryCode}
+                                    onClick={() => openDossier(f.countryCode)}
+                                    style={{ fontSize:11, fontWeight:600, color:"#fff", background:statusColors[eff]||"var(--muted)", borderRadius:6, padding:"3px 8px", cursor:"pointer" }}
+                                  >
+                                    {f.countryCode}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                        {ev.countries.length === 0 && (
+                          <div style={{ textAlign:"center", padding:"8px", color:"var(--accent)", fontWeight:700 }}>🗳️ ANA HEDEF</div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ══ KONGRE ŞEHRİ — İstanbul vs Roma ══ */}
+        {view === "kongre-şehri" && (() => {
+          const allFeds = federationSeeds;
+          const cityOf = (code: string): CityVote => (overrides[code]?.cityVote as CityVote) ?? "bilinmiyor";
+
+          const istanbulList = allFeds.filter(f => cityOf(f.countryCode) === "istanbul");
+          const romaList = allFeds.filter(f => cityOf(f.countryCode) === "roma");
+          const kararsızList = allFeds.filter(f => cityOf(f.countryCode) === "kararsız");
+          const bilinmiyorList = allFeds.filter(f => cityOf(f.countryCode) === "bilinmiyor");
+
+          // Kıta bazlı dağılım
+          const continentBreak: Record<string, {istanbul:number, roma:number, kararsız:number, bilinmiyor:number}> = {};
+          ["EG","AGU","UAG","PAGU","OGU"].forEach(c => { continentBreak[c] = {istanbul:0, roma:0, kararsız:0, bilinmiyor:0}; });
+          allFeds.forEach(f => {
+            const c = f.continent;
+            if (continentBreak[c]) continentBreak[c][cityOf(f.countryCode)]++;
+          });
+
+          const total = allFeds.length;
+          const iPct = Math.round((istanbulList.length / total) * 100);
+          const rPct = Math.round((romaList.length / total) * 100);
+          const kPct = Math.round((kararsızList.length / total) * 100);
+
+          const [filter, setFilter] = [cityFilter, setCityFilter];
+          const filteredList = filter === "istanbul" ? istanbulList : filter === "roma" ? romaList : filter === "kararsız" ? kararsızList : filter === "bilinmiyor" ? bilinmiyorList : allFeds;
+
+          return (
+            <div className="tab-scroll">
+              <div style={{ padding:"24px 20px", maxWidth:1100, margin:"0 auto" }}>
+                <h2 style={{ fontSize:22, fontWeight:800, color:"var(--text)", marginBottom:4 }}>🏛️ Kongre Şehri Tercihi</h2>
+                <p style={{ fontSize:13, color:"var(--muted)", marginBottom:24 }}>İstanbul mu, Roma mı? — FIG Kongresi'ne ev sahipliği yapacak şehir oylaması.</p>
+
+                {/* Büyük Karşılaştırma Kartı */}
+                <div style={{ display:"grid", gridTemplateColumns:"1fr auto 1fr", gap:16, alignItems:"stretch", marginBottom:20 }}>
+                  {/* İstanbul */}
+                  <div style={{ background: istanbulList.length >= romaList.length ? "linear-gradient(135deg, #1a2d2d 0%, #0d2329 100%)" : "var(--surface)", border:`2px solid ${istanbulList.length >= romaList.length ? "#0ea5e9" : "var(--border)"}`, borderRadius:14, padding:"20px" }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12 }}>
+                      <span style={{ fontSize:28 }}>🇹🇷</span>
+                      <div>
+                        <div style={{ fontSize:18, fontWeight:800, color:"#0ea5e9" }}>İstanbul</div>
+                        <div style={{ fontSize:11, color:"var(--muted)" }}>Türkiye adaylığı</div>
+                      </div>
+                    </div>
+                    <div style={{ fontSize:48, fontWeight:800, color:"#0ea5e9", lineHeight:1 }}>{istanbulList.length}</div>
+                    <div style={{ fontSize:13, color:"var(--muted)", marginTop:4 }}>federasyon destekliyor (%{iPct})</div>
+                    <div style={{ marginTop:10, height:8, background:"var(--surface2)", borderRadius:4, overflow:"hidden" }}>
+                      <div style={{ width:`${iPct}%`, height:"100%", background:"#0ea5e9" }} />
+                    </div>
+                  </div>
+                  <div style={{ display:"flex", alignItems:"center", fontSize:24, fontWeight:800, color:"var(--muted)" }}>VS</div>
+                  {/* Roma */}
+                  <div style={{ background: romaList.length > istanbulList.length ? "linear-gradient(135deg, #2d1a1a 0%, #29130d 100%)" : "var(--surface)", border:`2px solid ${romaList.length > istanbulList.length ? "#dc2626" : "var(--border)"}`, borderRadius:14, padding:"20px" }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12 }}>
+                      <span style={{ fontSize:28 }}>🇮🇹</span>
+                      <div>
+                        <div style={{ fontSize:18, fontWeight:800, color:"#dc2626" }}>Roma</div>
+                        <div style={{ fontSize:11, color:"var(--muted)" }}>İtalya adaylığı</div>
+                      </div>
+                    </div>
+                    <div style={{ fontSize:48, fontWeight:800, color:"#dc2626", lineHeight:1 }}>{romaList.length}</div>
+                    <div style={{ fontSize:13, color:"var(--muted)", marginTop:4 }}>federasyon destekliyor (%{rPct})</div>
+                    <div style={{ marginTop:10, height:8, background:"var(--surface2)", borderRadius:4, overflow:"hidden" }}>
+                      <div style={{ width:`${rPct}%`, height:"100%", background:"#dc2626" }} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Özet Satırı */}
+                <div style={{ display:"flex", gap:10, marginBottom:20, flexWrap:"wrap" }}>
+                  <div style={{ flex:1, minWidth:140, background:"var(--surface)", border:"1px solid var(--border)", borderRadius:10, padding:"10px 14px" }}>
+                    <div style={{ fontSize:11, color:"var(--muted)" }}>❓ Kararsız</div>
+                    <div style={{ fontSize:20, fontWeight:800, color:"#f59e0b" }}>{kararsızList.length} <span style={{ fontSize:11, color:"var(--muted)" }}>(%{kPct})</span></div>
+                  </div>
+                  <div style={{ flex:1, minWidth:140, background:"var(--surface)", border:"1px solid var(--border)", borderRadius:10, padding:"10px 14px" }}>
+                    <div style={{ fontSize:11, color:"var(--muted)" }}>⚫ Bilinmiyor</div>
+                    <div style={{ fontSize:20, fontWeight:800, color:"var(--muted)" }}>{bilinmiyorList.length}</div>
+                  </div>
+                  <div style={{ flex:1, minWidth:140, background:"var(--surface)", border:"1px solid var(--border)", borderRadius:10, padding:"10px 14px" }}>
+                    <div style={{ fontSize:11, color:"var(--muted)" }}>🎯 Fark</div>
+                    <div style={{ fontSize:20, fontWeight:800, color: istanbulList.length >= romaList.length ? "#0ea5e9" : "#dc2626" }}>
+                      {istanbulList.length >= romaList.length ? "İST" : "ROM"} +{Math.abs(istanbulList.length - romaList.length)}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Kıta Bazlı Tablo */}
+                <div style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, padding:"14px 16px", marginBottom:20 }}>
+                  <div style={{ fontSize:13, fontWeight:700, color:"var(--text)", marginBottom:12 }}>🌍 Kıta Bazlı Dağılım</div>
+                  {Object.entries(continentBreak).map(([cont, br]) => {
+                    const contTotal = br.istanbul + br.roma + br.kararsız + br.bilinmiyor;
+                    if (contTotal === 0) return null;
+                    return (
+                      <div key={cont} style={{ marginBottom:10 }}>
+                        <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                          <span style={{ fontSize:12, fontWeight:600, color:"var(--text)" }}>{continentMeta[cont as ContinentCode]?.label || cont}</span>
+                          <span style={{ fontSize:11, color:"var(--muted)" }}>İST {br.istanbul} · ROM {br.roma} · Kararsız {br.kararsız} · ? {br.bilinmiyor}</span>
+                        </div>
+                        <div style={{ display:"flex", height:8, borderRadius:4, overflow:"hidden", background:"var(--surface2)" }}>
+                          <div style={{ width:`${(br.istanbul/contTotal)*100}%`, background:"#0ea5e9" }} />
+                          <div style={{ width:`${(br.roma/contTotal)*100}%`, background:"#dc2626" }} />
+                          <div style={{ width:`${(br.kararsız/contTotal)*100}%`, background:"#f59e0b" }} />
+                          <div style={{ width:`${(br.bilinmiyor/contTotal)*100}%`, background:"#475569" }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Filtre Sekmeleri */}
+                <div style={{ display:"flex", gap:6, marginBottom:14, flexWrap:"wrap" }}>
+                  {[
+                    {val:"all", label:`Tümü (${total})`, color:"var(--accent)"},
+                    {val:"istanbul", label:`🇹🇷 İstanbul (${istanbulList.length})`, color:"#0ea5e9"},
+                    {val:"roma", label:`🇮🇹 Roma (${romaList.length})`, color:"#dc2626"},
+                    {val:"kararsız", label:`❓ Kararsız (${kararsızList.length})`, color:"#f59e0b"},
+                    {val:"bilinmiyor", label:`⚫ Bilinmiyor (${bilinmiyorList.length})`, color:"#475569"},
+                  ].map(opt => (
+                    <button
+                      key={opt.val}
+                      type="button"
+                      onClick={() => setFilter(opt.val as any)}
+                      style={{
+                        background: filter === opt.val ? opt.color : "var(--surface2)",
+                        color: filter === opt.val ? "#fff" : "var(--muted)",
+                        border:`1px solid ${filter === opt.val ? opt.color : "var(--border)"}`,
+                        borderRadius:18, padding:"4px 12px", fontSize:11, fontWeight:600, cursor:"pointer",
+                      }}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Ülke Listesi — Hızlı Atama */}
+                <div style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, padding:"10px" }}>
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(280px, 1fr))", gap:8 }}>
+                    {filteredList.slice(0, 60).map(f => {
+                      const current = cityOf(f.countryCode);
+                      const cityColors: Record<CityVote, string> = { istanbul:"#0ea5e9", roma:"#dc2626", kararsız:"#f59e0b", bilinmiyor:"#475569" };
+                      return (
+                        <div key={f.countryCode} style={{ background:"var(--surface2)", border:`1px solid ${cityColors[current]}40`, borderRadius:8, padding:"8px 10px" }}>
+                          <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:6 }}>
+                            <span className="flag-emoji">{flagEmoji(f.countryCode)}</span>
+                            <span style={{ fontSize:12, fontWeight:700, color:"var(--accent)" }}>{f.countryCode}</span>
+                            <span style={{ fontSize:11, color:"var(--text)", flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{trName(f)}</span>
+                            <button type="button" onClick={() => openDossier(f.countryCode)} style={{ background:"transparent", border:"none", cursor:"pointer", fontSize:11, color:"var(--muted)" }}>↗</button>
+                          </div>
+                          <div style={{ display:"flex", gap:3 }}>
+                            {(["istanbul","roma","kararsız","bilinmiyor"] as CityVote[]).map(v => {
+                              const labels: Record<CityVote,string> = { istanbul:"🇹🇷 İST", roma:"🇮🇹 ROM", kararsız:"❓", bilinmiyor:"⚫" };
+                              return (
+                                <button
+                                  key={v}
+                                  type="button"
+                                  onClick={() => setOverride(f.countryCode, { cityVote: v })}
+                                  style={{
+                                    flex:1,
+                                    background: current === v ? cityColors[v] : "var(--surface)",
+                                    border: `1px solid ${current === v ? cityColors[v] : "var(--border)"}`,
+                                    color: current === v ? "#fff" : "var(--muted)",
+                                    borderRadius:5, padding:"3px 4px", fontSize:10, fontWeight:600, cursor:"pointer",
+                                  }}
+                                >
+                                  {labels[v]}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {filteredList.length > 60 && (
+                    <div style={{ textAlign:"center", fontSize:11, color:"var(--muted)", marginTop:10 }}>
+                      İlk 60 federasyon gösteriliyor (toplam {filteredList.length})
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
       </main>
     </div>{/* /shell */}
@@ -2380,6 +3040,122 @@ const AppMain = () => {
                     </div>
                   </div>
                 )}
+
+                {/* FEATURE 1: Taahhüt Seviyesi */}
+                <div className="ds-block">
+                  <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginBottom:8, letterSpacing:"0.05em" }}>TAAHHÜT SEVİYESİ</div>
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:6 }}>
+                    {[
+                      {level:1, label:"Temas yok", color:"#475569"},
+                      {level:2, label:"Tanışma yapıldı", color:"#ca8a04"},
+                      {level:3, label:"İlgi gösterdi", color:"#ea580c"},
+                      {level:4, label:"Sözlü olumlu", color:"#16a34a"},
+                      {level:5, label:"Kesin taahhüt", color:"#0d9488"},
+                      {level:6, label:"Yazılı taahhüt", color:"#7c3aed"},
+                    ].map(({level, label, color}) => {
+                      const current = (overrides[selected.countryCode]?.commitmentLevel as number|undefined) ?? 1;
+                      return (
+                        <button
+                          key={level}
+                          type="button"
+                          onClick={() => setOverride(selected.countryCode, { commitmentLevel: level } as any)}
+                          style={{
+                            background: current === level ? color : "var(--surface2)",
+                            border: `2px solid ${current === level ? color : "var(--border)"}`,
+                            borderRadius:8,
+                            padding:"8px 4px",
+                            cursor:"pointer",
+                            textAlign:"center",
+                          }}
+                        >
+                          <div style={{ fontSize:16, marginBottom:2 }}>
+                            {(["🔵","🟡","🟠","🟢","✅","🏆"] as const)[level-1]}
+                          </div>
+                          <div style={{ fontSize:9, color: current === level ? "#fff" : "var(--muted)", fontWeight:600, lineHeight:1.2 }}>{label}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* FEATURE 2: Kongre Katılımı */}
+                <div className="ds-block">
+                  <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginBottom:8, letterSpacing:"0.05em" }}>KONGRE KATILIMI</div>
+                  <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                    {[
+                      {val:"confirmed", label:"Kesin gelecek", icon:"✈️", color:"#16a34a"},
+                      {val:"likely", label:"Büyük ihtimalle", icon:"🟢", color:"#0d9488"},
+                      {val:"uncertain", label:"Belirsiz", icon:"❓", color:"#ca8a04"},
+                      {val:"no", label:"Gelmeyecek", icon:"✗", color:"#dc2626"},
+                      {val:"unknown", label:"Bilinmiyor", icon:"—", color:"#475569"},
+                    ].map(({val, label, icon, color}) => {
+                      const current = (overrides[selected.countryCode]?.congressAttendance as string|undefined) ?? "unknown";
+                      return (
+                        <button
+                          key={val}
+                          type="button"
+                          onClick={() => setOverride(selected.countryCode, { congressAttendance: val } as any)}
+                          style={{
+                            background: current === val ? color : "var(--surface2)",
+                            border:`2px solid ${current === val ? color : "var(--border)"}`,
+                            borderRadius:6, padding:"6px 10px", cursor:"pointer",
+                            fontSize:11, fontWeight:600,
+                            color: current === val ? "#fff" : "var(--muted)",
+                          }}
+                        >
+                          {icon} {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div style={{ marginTop:8 }}>
+                    <input
+                      placeholder="Not (seyahat desteği, delegasyon vb.)"
+                      value={(overrides[selected.countryCode]?.attendanceNote as string|undefined) ?? ""}
+                      onChange={e => setOverride(selected.countryCode, { attendanceNote: e.target.value } as any)}
+                      style={{ width:"100%", background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:6, padding:"6px 8px", color:"var(--text)", fontSize:12, boxSizing:"border-box" }}
+                    />
+                  </div>
+                </div>
+
+                {/* ── KONGRE ŞEHRİ TERCİHİ — İstanbul vs Roma ── */}
+                <div style={{ marginBottom:16 }}>
+                  <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginBottom:8, letterSpacing:"0.05em" }}>🏛️ KONGRE ŞEHRİ TERCİHİ</div>
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:6 }}>
+                    {[
+                      {val:"istanbul" as CityVote, label:"🇹🇷 İstanbul", color:"#0ea5e9"},
+                      {val:"roma" as CityVote, label:"🇮🇹 Roma", color:"#dc2626"},
+                      {val:"kararsız" as CityVote, label:"❓ Kararsız", color:"#f59e0b"},
+                      {val:"bilinmiyor" as CityVote, label:"⚫ Bilinmiyor", color:"#475569"},
+                    ].map(({val, label, color}) => {
+                      const current = (overrides[selected.countryCode]?.cityVote as CityVote|undefined) ?? "bilinmiyor";
+                      return (
+                        <button
+                          key={val}
+                          type="button"
+                          onClick={() => setOverride(selected.countryCode, { cityVote: val })}
+                          style={{
+                            background: current === val ? color : "var(--surface2)",
+                            border:`2px solid ${current === val ? color : "var(--border)"}`,
+                            borderRadius:8, padding:"8px 4px", cursor:"pointer",
+                            fontSize:11, fontWeight:600,
+                            color: current === val ? "#fff" : "var(--muted)",
+                          }}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div style={{ marginTop:8 }}>
+                    <input
+                      placeholder="Şehir tercihi notu (ne dedi, neden bu tercih...)"
+                      value={(overrides[selected.countryCode]?.cityVoteNote as string|undefined) ?? ""}
+                      onChange={e => setOverride(selected.countryCode, { cityVoteNote: e.target.value })}
+                      style={{ width:"100%", background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:6, padding:"6px 8px", color:"var(--text)", fontSize:12, boxSizing:"border-box" }}
+                    />
+                  </div>
+                </div>
               </>
             )}
 
@@ -2555,6 +3331,28 @@ const AppMain = () => {
                         value={contactNextStep}
                         onChange={e => setContactNextStep(e.target.value)}
                       />
+                      {/* FEATURE 4: Objection tags */}
+                      <div style={{ marginTop:6 }}>
+                        <div style={{ fontSize:11, color:"var(--muted)", marginBottom:4 }}>İtiraz türleri (opsiyonel)</div>
+                        <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+                          {["Rakibi tercih ediyor","Kaynak sorunu","Bilgi eksikliği","Politik baskı","Kişisel ilişki yok","Kurumsal hafıza","Diğer"].map(obj => (
+                            <button
+                              key={obj}
+                              type="button"
+                              onClick={() => setContactObjections(prev =>
+                                prev.includes(obj) ? prev.filter(o => o !== obj) : [...prev, obj]
+                              )}
+                              style={{
+                                background: contactObjections.includes(obj) ? "rgba(59,130,246,0.3)" : "var(--surface2)",
+                                border:`1px solid ${contactObjections.includes(obj) ? "#3b82f6" : "var(--border)"}`,
+                                borderRadius:16, padding:"3px 10px", fontSize:11, color:"var(--text)", cursor:"pointer",
+                              }}
+                            >
+                              {obj}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                       <div style={{ display:"flex", gap:8, marginTop:6 }}>
                         <button className="note-submit" type="submit">{t(lang,"save")}</button>
                         <button className="note-cancel" type="button" onClick={() => setShowContactForm(false)}>{t(lang,"cancel")}</button>
@@ -2595,6 +3393,112 @@ const AppMain = () => {
                     ))}
                   </div>
                 )}
+
+                {/* FEATURE 6: Etki Ağı */}
+                {(selected.relationshipNetwork ?? []).length > 0 && (
+                  <div style={{ marginTop:16 }}>
+                    <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginBottom:10, letterSpacing:"0.05em" }}>📡 ETKİ AĞI</div>
+                    {selected.relationshipNetwork.map((rel, i) => {
+                      const kindColors: Record<string,string> = {ally:"#4ade80", swing:"#fbbf24", competitive:"#f87171"};
+                      const kindLabels: Record<string,string> = {ally:"🤝 Müttefik", swing:"↔️ Sallanıyor", competitive:"⚔️ Rekabetçi"};
+                      return (
+                        <div key={i} style={{ display:"flex", alignItems:"center", gap:10, padding:"6px 10px", background:"var(--surface2)", borderRadius:6, marginBottom:6, border:`1px solid ${(kindColors[rel.kind]||"var(--border)")}20` }}>
+                          <span style={{ fontSize:11, fontWeight:700, color:kindColors[rel.kind]||"var(--muted)", minWidth:110 }}>
+                            {kindLabels[rel.kind]||rel.kind}
+                          </span>
+                          <span style={{ fontSize:12, fontWeight:700, color:"var(--accent)", minWidth:36 }}>{rel.countryCode}</span>
+                          {rel.label && <span style={{ fontSize:11, color:"var(--text)", flex:1 }}>{rel.label}</span>}
+                          {rel.note && <span style={{ fontSize:10, color:"var(--muted)" }}>{rel.note}</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* FEATURE 5: Risk Kayıtları */}
+                <div style={{ marginTop:16 }}>
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
+                    <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", letterSpacing:"0.05em" }}>⚠️ RİSK KAYITLARI</div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newRisk = { type:"other", severity:"medium", note:"", date:new Date().toISOString().slice(0,10), resolved:false };
+                        const existing = risks[selected.countryCode] || [];
+                        set(ref(db, `fig-v3/risks/${selected.countryCode}`), [...existing, newRisk]);
+                      }}
+                      style={{ background:"var(--accent)", color:"#fff", border:"none", borderRadius:6, padding:"3px 10px", fontSize:11, cursor:"pointer", fontWeight:600 }}
+                    >
+                      + Risk Ekle
+                    </button>
+                  </div>
+                  {(risks[selected.countryCode] || []).length === 0 ? (
+                    <p style={{ fontSize:12, color:"var(--muted)", margin:0 }}>Risk kaydı yok.</p>
+                  ) : (
+                    <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                      {(risks[selected.countryCode] || []).map((r: any, i: number) => (
+                        <div key={i} style={{
+                          background: r.resolved ? "var(--surface2)" : r.severity === "high" ? "rgba(239,68,68,0.08)" : r.severity === "medium" ? "rgba(245,158,11,0.08)" : "var(--surface2)",
+                          border:`1px solid ${r.resolved ? "var(--border)" : r.severity === "high" ? "rgba(239,68,68,0.4)" : r.severity === "medium" ? "rgba(245,158,11,0.4)" : "var(--border)"}`,
+                          borderRadius:8, padding:"10px 12px",
+                        }}>
+                          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
+                            <select
+                              value={r.type}
+                              onChange={e => {
+                                const updated = [...(risks[selected.countryCode] || [])];
+                                updated[i] = {...r, type: e.target.value};
+                                set(ref(db, `fig-v3/risks/${selected.countryCode}`), updated);
+                              }}
+                              style={{ background:"transparent", border:"none", color:"var(--accent)", fontSize:11, fontWeight:700, cursor:"pointer" }}
+                            >
+                              <option value="leadership_change">👤 Liderlik değişikliği</option>
+                              <option value="budget">💰 Bütçe sorunu</option>
+                              <option value="competitor_offer">⚔️ Rakip teklif</option>
+                              <option value="event_conflict">📅 Etkinlik çakışması</option>
+                              <option value="other">⚠️ Diğer</option>
+                            </select>
+                            <select
+                              value={r.severity}
+                              onChange={e => {
+                                const updated = [...(risks[selected.countryCode] || [])];
+                                updated[i] = {...r, severity: e.target.value};
+                                set(ref(db, `fig-v3/risks/${selected.countryCode}`), updated);
+                              }}
+                              style={{ background:"transparent", border:"none", color: r.severity==="high"?"#f87171":r.severity==="medium"?"#fbbf24":"#94a3b8", fontSize:11, cursor:"pointer" }}
+                            >
+                              <option value="high">🔴 Yüksek</option>
+                              <option value="medium">🟡 Orta</option>
+                              <option value="low">🟢 Düşük</option>
+                            </select>
+                            <span style={{ marginLeft:"auto", fontSize:10, color:"var(--muted)" }}>{r.date}</span>
+                            <button type="button" onClick={() => {
+                              const updated = [...(risks[selected.countryCode] || [])];
+                              updated[i] = {...r, resolved: !r.resolved};
+                              set(ref(db, `fig-v3/risks/${selected.countryCode}`), updated);
+                            }} style={{ background:"transparent", border:"none", cursor:"pointer", fontSize:11, color: r.resolved ? "#4ade80" : "var(--muted)" }}>
+                              {r.resolved ? "✅ Çözüldü" : "○ Çöz"}
+                            </button>
+                            <button type="button" onClick={() => {
+                              const updated = (risks[selected.countryCode] || []).filter((_:any, idx:number) => idx !== i);
+                              set(ref(db, `fig-v3/risks/${selected.countryCode}`), updated);
+                            }} style={{ background:"transparent", border:"none", cursor:"pointer", fontSize:12, color:"var(--muted)" }}>✕</button>
+                          </div>
+                          <textarea
+                            value={r.note}
+                            onChange={e => {
+                              const updated = [...(risks[selected.countryCode] || [])];
+                              updated[i] = {...r, note: e.target.value};
+                              set(ref(db, `fig-v3/risks/${selected.countryCode}`), updated);
+                            }}
+                            placeholder="Risk açıklaması..."
+                            rows={2}
+                            style={{ width:"100%", background:"transparent", border:"none", color:"var(--text)", fontSize:12, resize:"none", fontFamily:"inherit", boxSizing:"border-box" }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
                 {/* Diplomatik Müttefikler */}
                 <div className="ds-block">

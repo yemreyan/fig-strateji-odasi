@@ -90,6 +90,7 @@ export interface ContactLogEntry {
   channel: "desk" | "email" | "call" | "visit";
   summary: string;
   nextStep: string;
+  objections?: string[];
 }
 
 export interface VisualDeckCard {

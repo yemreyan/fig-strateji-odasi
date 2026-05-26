@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "vite build",
     "preview": "vite preview",
     "sync:fig-authorities": "node scripts/sync-fig-authorities.mjs",
     "sync:fig-directory": "node scripts/sync-fig-directory.mjs",

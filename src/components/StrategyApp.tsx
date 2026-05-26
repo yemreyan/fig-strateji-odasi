@@ -615,6 +615,9 @@ const AppMain = () => {
 
   // Feature: City Vote (Istanbul vs Roma)
   const [cityFilter, setCityFilter] = useState<"all"|"istanbul"|"roma"|"kararsız"|"bilinmiyor">("all");
+  const [cityPage, setCityPage] = useState(1);
+  const [citySearch, setCitySearch] = useState("");
+  const [cityPageSize, setCityPageSize] = useState(40);
 
   // Firebase listeners
   useEffect(() => {
@@ -2211,7 +2214,16 @@ const AppMain = () => {
           const kPct = Math.round((kararsızList.length / total) * 100);
 
           const [filter, setFilter] = [cityFilter, setCityFilter];
-          const filteredList = filter === "istanbul" ? istanbulList : filter === "roma" ? romaList : filter === "kararsız" ? kararsızList : filter === "bilinmiyor" ? bilinmiyorList : allFeds;
+          const baseList = filter === "istanbul" ? istanbulList : filter === "roma" ? romaList : filter === "kararsız" ? kararsızList : filter === "bilinmiyor" ? bilinmiyorList : allFeds;
+          // Arama filtresi (kod veya isim)
+          const searchLower = citySearch.trim().toLowerCase();
+          const filteredList = searchLower
+            ? baseList.filter(f => f.countryCode.toLowerCase().includes(searchLower) || trName(f).toLowerCase().includes(searchLower))
+            : baseList;
+          const totalPages = Math.max(1, Math.ceil(filteredList.length / cityPageSize));
+          const currentPage = Math.min(cityPage, totalPages);
+          const pageStart = (currentPage - 1) * cityPageSize;
+          const pageList = filteredList.slice(pageStart, pageStart + cityPageSize);
 
           return (
             <div className="tab-scroll">
@@ -2307,7 +2319,7 @@ const AppMain = () => {
                     <button
                       key={opt.val}
                       type="button"
-                      onClick={() => setFilter(opt.val as any)}
+                      onClick={() => { setFilter(opt.val as any); setCityPage(1); }}
                       style={{
                         background: filter === opt.val ? opt.color : "var(--surface2)",
                         color: filter === opt.val ? "#fff" : "var(--muted)",
@@ -2320,10 +2332,41 @@ const AppMain = () => {
                   ))}
                 </div>
 
+                {/* Arama + Sayfa Boyutu */}
+                <div style={{ display:"flex", gap:8, marginBottom:10, alignItems:"center", flexWrap:"wrap" }}>
+                  <input
+                    type="text"
+                    placeholder={lang === "tr" ? "🔍 Ülke kodu veya adı ara…" : "🔍 Search country code or name…"}
+                    value={citySearch}
+                    onChange={e => { setCitySearch(e.target.value); setCityPage(1); }}
+                    style={{ flex:1, minWidth:200, background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8, padding:"6px 10px", color:"var(--text)", fontSize:12 }}
+                  />
+                  <select
+                    value={cityPageSize}
+                    onChange={e => { setCityPageSize(Number(e.target.value)); setCityPage(1); }}
+                    style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8, padding:"6px 8px", color:"var(--text)", fontSize:12, cursor:"pointer" }}
+                  >
+                    <option value={20}>20 / {lang === "tr" ? "sayfa" : "page"}</option>
+                    <option value={40}>40 / {lang === "tr" ? "sayfa" : "page"}</option>
+                    <option value={80}>80 / {lang === "tr" ? "sayfa" : "page"}</option>
+                    <option value={200}>{lang === "tr" ? "Tümü" : "All"}</option>
+                  </select>
+                </div>
+
                 {/* Ülke Listesi — Hızlı Atama */}
                 <div style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, padding:"10px" }}>
+                  <div style={{ fontSize:11, color:"var(--muted)", marginBottom:8, padding:"0 4px" }}>
+                    {lang === "tr"
+                      ? `Toplam ${filteredList.length} federasyon · Sayfa ${currentPage}/${totalPages} (${pageStart + 1}–${Math.min(pageStart + cityPageSize, filteredList.length)})`
+                      : `${filteredList.length} federations total · Page ${currentPage}/${totalPages} (${pageStart + 1}–${Math.min(pageStart + cityPageSize, filteredList.length)})`}
+                  </div>
                   <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(280px, 1fr))", gap:8 }}>
-                    {filteredList.slice(0, 60).map(f => {
+                    {pageList.length === 0 && (
+                      <div style={{ gridColumn:"1/-1", textAlign:"center", padding:"30px 10px", color:"var(--muted)", fontSize:13 }}>
+                        {lang === "tr" ? "Eşleşen federasyon bulunamadı." : "No matching federations."}
+                      </div>
+                    )}
+                    {pageList.map(f => {
                       const current = cityOf(f.countryCode);
                       const cityColors: Record<CityVote, string> = { istanbul:"#0ea5e9", roma:"#dc2626", kararsız:"#f59e0b", bilinmiyor:"#475569" };
                       return (
@@ -2359,9 +2402,74 @@ const AppMain = () => {
                       );
                     })}
                   </div>
-                  {filteredList.length > 60 && (
-                    <div style={{ textAlign:"center", fontSize:11, color:"var(--muted)", marginTop:10 }}>
-                      {t(lang,"first_n_shown")} {filteredList.length})
+                  {totalPages > 1 && (
+                    <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6, marginTop:14, flexWrap:"wrap" }}>
+                      <button
+                        type="button"
+                        onClick={() => setCityPage(1)}
+                        disabled={currentPage === 1}
+                        style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:6, padding:"4px 10px", fontSize:11, color: currentPage === 1 ? "var(--muted)" : "var(--text)", cursor: currentPage === 1 ? "not-allowed" : "pointer", fontWeight:600 }}
+                      >
+                        « {lang === "tr" ? "İlk" : "First"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCityPage(p => Math.max(1, p - 1))}
+                        disabled={currentPage === 1}
+                        style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:6, padding:"4px 10px", fontSize:11, color: currentPage === 1 ? "var(--muted)" : "var(--text)", cursor: currentPage === 1 ? "not-allowed" : "pointer", fontWeight:600 }}
+                      >
+                        ‹ {lang === "tr" ? "Önceki" : "Prev"}
+                      </button>
+                      {/* Sayfa numara butonları (max 7 görünür) */}
+                      {(() => {
+                        const pages: (number | "...")[] = [];
+                        const maxVisible = 7;
+                        if (totalPages <= maxVisible) {
+                          for (let i = 1; i <= totalPages; i++) pages.push(i);
+                        } else {
+                          pages.push(1);
+                          let start = Math.max(2, currentPage - 2);
+                          let end = Math.min(totalPages - 1, currentPage + 2);
+                          if (start > 2) pages.push("...");
+                          for (let i = start; i <= end; i++) pages.push(i);
+                          if (end < totalPages - 1) pages.push("...");
+                          pages.push(totalPages);
+                        }
+                        return pages.map((p, i) => p === "..." ? (
+                          <span key={`dot-${i}`} style={{ fontSize:11, color:"var(--muted)", padding:"0 4px" }}>…</span>
+                        ) : (
+                          <button
+                            key={p}
+                            type="button"
+                            onClick={() => setCityPage(p as number)}
+                            style={{
+                              background: p === currentPage ? "var(--accent)" : "var(--surface2)",
+                              border:`1px solid ${p === currentPage ? "var(--accent)" : "var(--border)"}`,
+                              borderRadius:6, padding:"4px 10px", fontSize:11,
+                              color: p === currentPage ? "#fff" : "var(--text)",
+                              cursor:"pointer", fontWeight:700, minWidth:28,
+                            }}
+                          >
+                            {p}
+                          </button>
+                        ));
+                      })()}
+                      <button
+                        type="button"
+                        onClick={() => setCityPage(p => Math.min(totalPages, p + 1))}
+                        disabled={currentPage === totalPages}
+                        style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:6, padding:"4px 10px", fontSize:11, color: currentPage === totalPages ? "var(--muted)" : "var(--text)", cursor: currentPage === totalPages ? "not-allowed" : "pointer", fontWeight:600 }}
+                      >
+                        {lang === "tr" ? "Sonraki" : "Next"} ›
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCityPage(totalPages)}
+                        disabled={currentPage === totalPages}
+                        style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:6, padding:"4px 10px", fontSize:11, color: currentPage === totalPages ? "var(--muted)" : "var(--text)", cursor: currentPage === totalPages ? "not-allowed" : "pointer", fontWeight:600 }}
+                      >
+                        {lang === "tr" ? "Son" : "Last"} »
+                      </button>
                     </div>
                   )}
                 </div>

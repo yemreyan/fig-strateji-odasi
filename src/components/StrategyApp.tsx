@@ -2143,15 +2143,19 @@ const AppMain = () => {
 
         {/* ══ TAKVİM ══ */}
         {view === "takvim" && (() => {
-          // Varsayılan etkinlikler (Firebase boşsa seed butonuyla yüklenir)
+          // Varsayılan etkinlikler — i18n key olarak saklanır (storage independent of language)
+          // Render zamanında çevrilir
           const DEFAULT_EVENTS: CalEvent[] = [
-            { id:"e_doha",     date:"2026-06-15", label:t(lang,"event_doha"),         emoji:"🏆", countries:["QAT","KUW","BRN","UAE","EGY","JOR","OMA","IRQ"], note:"" },
-            { id:"e_panam",    date:"2026-07-20", label:t(lang,"event_pan_american"), emoji:"🌎", countries:["BRA","ARG","COL","CHI","MEX","PER","VEN","URU"], note:"" },
-            { id:"e_africa",   date:"2026-08-10", label:t(lang,"event_africa_cup"),   emoji:"🌍", countries:["EGY","MAR","RSA","SEN","NGR","ETH","CMR","GHA"], note:"" },
-            { id:"e_asia",     date:"2026-09-05", label:t(lang,"event_asia_champ"),   emoji:"🌏", countries:["JPN","CHN","KOR","INA","THA","PHI","IND","MAS"], note:"" },
-            { id:"e_europe",   date:"2026-09-25", label:t(lang,"event_europe_champ"), emoji:"🇪🇺", countries:["GER","FRA","ITA","ESP","GBR","NED","SUI","BEL"], note:"" },
-            { id:"e_congress", date:"2026-10-01", label:t(lang,"event_fig_congress"), emoji:"🗳️", countries:[], note:"" },
+            { id:"e_doha",     date:"2026-06-15", label:"__i18n:event_doha",         emoji:"🏆", countries:["QAT","KUW","BRN","UAE","EGY","JOR","OMA","IRQ"], note:"" },
+            { id:"e_panam",    date:"2026-07-20", label:"__i18n:event_pan_american", emoji:"🌎", countries:["BRA","ARG","COL","CHI","MEX","PER","VEN","URU"], note:"" },
+            { id:"e_africa",   date:"2026-08-10", label:"__i18n:event_africa_cup",   emoji:"🌍", countries:["EGY","MAR","RSA","SEN","NGR","ETH","CMR","GHA"], note:"" },
+            { id:"e_asia",     date:"2026-09-05", label:"__i18n:event_asia_champ",   emoji:"🌏", countries:["JPN","CHN","KOR","INA","THA","PHI","IND","MAS"], note:"" },
+            { id:"e_europe",   date:"2026-09-25", label:"__i18n:event_europe_champ", emoji:"🇪🇺", countries:["GER","FRA","ITA","ESP","GBR","NED","SUI","BEL"], note:"" },
+            { id:"e_congress", date:"2026-10-01", label:"__i18n:event_fig_congress", emoji:"🗳️", countries:[], note:"" },
           ];
+
+          // i18n etiket çözümleyici — "__i18n:key" prefix'i varsa çevir
+          const resolveLabel = (label: string): string => label.startsWith("__i18n:") ? t(lang, label.slice(7)) : label;
 
           const events: CalEvent[] = calendarEvents && calendarEvents.length > 0 ? calendarEvents : [];
           const sortedEvents = [...events].sort((a,b) => a.date.localeCompare(b.date));
@@ -2180,13 +2184,21 @@ const AppMain = () => {
             seedEvents(DEFAULT_EVENTS);
           };
           const deleteEvent = (id: string) => {
-            if (!confirm(lang === "tr" ? "Bu etkinliği silmek istediğine emin misin?" : "Are you sure you want to delete this event?")) return;
+            if (!confirm(lang === "tr" ? "Bu etkinliği silmek istediğine emin misin?" : "Are you sure you want to delete this event?")) return false;
             removeEvent(id);
+            return true;
           };
-          const updateEvent = (id: string, patch: Partial<CalEvent>) => {
-            const ev = events.find(e => e.id === id);
-            if (!ev) return;
-            saveEvent({ ...ev, ...patch });
+          const saveDraft = () => {
+            if (!calDraft.label.trim()) {
+              alert(lang === "tr" ? "Etkinlik adı boş olamaz." : "Event name cannot be empty.");
+              return;
+            }
+            if (!calDraft.date) {
+              alert(lang === "tr" ? "Tarih seçmelisin." : "You must select a date.");
+              return;
+            }
+            saveEvent(calDraft);
+            setCalEditingId(null);
           };
           const toggleCountry = (eventId: string, code: string) => {
             const ev = events.find(e => e.id === eventId);
@@ -2270,13 +2282,13 @@ const AppMain = () => {
                               style={{ width:"100%", background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8, padding:"6px 10px", color:"var(--text)", fontSize:12, resize:"vertical", boxSizing:"border-box", fontFamily:"inherit" }}
                             />
                             <div style={{ display:"flex", gap:6 }}>
-                              <button type="button" onClick={() => { updateEvent(ev.id, calDraft); setCalEditingId(null); }} style={{ background:"var(--accent)", color:"#fff", border:"none", borderRadius:6, padding:"6px 14px", fontSize:12, fontWeight:600, cursor:"pointer" }}>
+                              <button type="button" onClick={saveDraft} style={{ background:"var(--accent)", color:"#fff", border:"none", borderRadius:6, padding:"6px 14px", fontSize:12, fontWeight:600, cursor:"pointer" }}>
                                 ✓ {lang === "tr" ? "Kaydet" : "Save"}
                               </button>
                               <button type="button" onClick={() => setCalEditingId(null)} style={{ background:"var(--surface2)", border:"1px solid var(--border)", color:"var(--muted)", borderRadius:6, padding:"6px 14px", fontSize:12, cursor:"pointer" }}>
                                 {lang === "tr" ? "İptal" : "Cancel"}
                               </button>
-                              <button type="button" onClick={() => { deleteEvent(ev.id); setCalEditingId(null); }} style={{ background:"transparent", border:"1px solid rgba(239,68,68,0.4)", color:"#f87171", borderRadius:6, padding:"6px 14px", fontSize:12, cursor:"pointer", marginLeft:"auto" }}>
+                              <button type="button" onClick={() => { if (deleteEvent(ev.id)) setCalEditingId(null); }} style={{ background:"transparent", border:"1px solid rgba(239,68,68,0.4)", color:"#f87171", borderRadius:6, padding:"6px 14px", fontSize:12, cursor:"pointer", marginLeft:"auto" }}>
                                 🗑️ {lang === "tr" ? "Sil" : "Delete"}
                               </button>
                             </div>
@@ -2285,7 +2297,7 @@ const AppMain = () => {
                           <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:12 }}>
                             <span style={{ fontSize:22 }}>{ev.emoji}</span>
                             <div style={{ flex:1 }}>
-                              <div style={{ fontSize:15, fontWeight:700, color:"var(--text)" }}>{ev.label}</div>
+                              <div style={{ fontSize:15, fontWeight:700, color:"var(--text)" }}>{resolveLabel(ev.label)}</div>
                               <div style={{ fontSize:12, color:"var(--muted)" }}>{ev.date} · {daysLeft > 0 ? `${daysLeft} ${t(lang,"days_left")}` : t(lang,"passed")}</div>
                               {ev.note && <div style={{ fontSize:11, color:"var(--muted)", marginTop:3, fontStyle:"italic" }}>{ev.note}</div>}
                             </div>
@@ -2296,7 +2308,7 @@ const AppMain = () => {
                                 {supporters.length > 0 && <span style={{ fontSize:11, background:"rgba(16,217,160,0.2)", color:"#10D9A0", borderRadius:16, padding:"2px 8px", fontWeight:600 }}>{supporters.length} {t(lang,"event_supporter")}</span>}
                               </div>
                             )}
-                            <button type="button" onClick={() => { setCalEditingId(ev.id); setCalDraft(ev); }} className="edit-btn" title={lang === "tr" ? "Düzenle" : "Edit"}>
+                            <button type="button" onClick={() => { setCalEditingId(ev.id); setCalDraft({...ev, label: resolveLabel(ev.label)}); }} className="edit-btn" title={lang === "tr" ? "Düzenle" : "Edit"}>
                               <IcEdit />
                             </button>
                           </div>
@@ -2343,8 +2355,8 @@ const AppMain = () => {
                                   placeholder={lang === "tr" ? "🔍 Ülke ara…" : "🔍 Search country…"}
                                   style={{ width:"100%", background:"var(--surface)", border:"1px solid var(--border)", borderRadius:6, padding:"5px 10px", color:"var(--text)", fontSize:12, marginBottom:8, boxSizing:"border-box" }}
                                 />
-                                <div style={{ maxHeight:200, overflowY:"auto", display:"flex", flexWrap:"wrap", gap:4 }}>
-                                  {pickerList.slice(0,100).map(f => {
+                                <div style={{ maxHeight:300, overflowY:"auto", display:"flex", flexWrap:"wrap", gap:4 }}>
+                                  {pickerList.map(f => {
                                     const has = ev.countries.includes(f.countryCode);
                                     return (
                                       <button
@@ -2369,11 +2381,9 @@ const AppMain = () => {
                                     </div>
                                   )}
                                 </div>
-                                {pickerList.length > 100 && (
-                                  <div style={{ fontSize:10, color:"var(--muted)", marginTop:6, textAlign:"center" }}>
-                                    {lang === "tr" ? `İlk 100 gösteriliyor (toplam ${pickerList.length}). Daha hassas arama yapın.` : `Showing first 100 (total ${pickerList.length}). Refine search.`}
-                                  </div>
-                                )}
+                                <div style={{ fontSize:10, color:"var(--muted)", marginTop:6, textAlign:"center" }}>
+                                  {lang === "tr" ? `${pickerList.length} federasyon · Tümünü görmek için kaydır` : `${pickerList.length} federations · Scroll to see all`}
+                                </div>
                               </div>
                             )}
 

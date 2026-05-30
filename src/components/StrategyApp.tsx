@@ -2412,7 +2412,9 @@ const AppMain = () => {
 
         {/* ══ KONGRE ŞEHRİ — İstanbul vs Roma ══ */}
         {view === "kongre-şehri" && (() => {
-          const allFeds = federationSeeds;
+          // Türkçe alfabetik sıralama (ç, ğ, ı, ö, ş, ü dikkate alınır)
+          const trCollator = new Intl.Collator(lang === "tr" ? "tr" : "en", { sensitivity: "base" });
+          const allFeds = [...federationSeeds].sort((a, b) => trCollator.compare(trName(a), trName(b)));
           const cityOf = (code: string): CityVote => (overrides[code]?.cityVote as CityVote) ?? "bilinmiyor";
 
           const istanbulList = allFeds.filter(f => cityOf(f.countryCode) === "istanbul");

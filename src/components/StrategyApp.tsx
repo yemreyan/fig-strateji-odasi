@@ -952,6 +952,10 @@ const AppMain = () => {
     return ov ?? ((seed?.[field] as string[] | undefined) ?? []);
   };
 
+  // Hesaplanan (computed) alanlar için override desteği — override varsa onu, yoksa hesaplanan değeri döner
+  const getEditableComputed = (code: string, field: string, computed: string[]): string[] =>
+    contentOverrides[code]?.[field] ?? computed;
+
   // İstihbarat alanları helper
   const getDiplomaticAllies = (code: string): string[] =>
     contentOverrides[code]?.diplomaticAllies ?? (mergedByCode[code]?.diplomaticAllies ?? []);
@@ -2715,7 +2719,7 @@ const AppMain = () => {
 
           {/* Header */}
           <div className="ds-header">
-            <PresidentAvatar countryCode={selected.countryCode} presidentName={selected.president} size="lg" clickable={true} />
+            <PresidentAvatar countryCode={selected.countryCode} presidentName={selected.president} size="lg" clickable={true} photoOverride={photoOverrides[selected.countryCode]} />
             <div style={{ minWidth:0, flex:1 }}>
               <div className="ds-title"><span className="flag-emoji flag-emoji-lg">{flagEmoji(selected.countryCode)}</span>{trName(selected)} <span className="ds-title-code">{selected.countryCode}</span></div>
               <div className="ds-meta">{selected.president}</div>
@@ -2881,41 +2885,80 @@ const AppMain = () => {
                 ))}
 
                 {/* Karar Mimarisi */}
-                {(selected.decisionArchitecture ?? []).length > 0 && (
-                  <div className="ds-block">
-                    <div className="ds-block-label">🏛️ {lang === "tr" ? "Karar Mimarisi" : "Decision Architecture"}</div>
-                    {selected.decisionArchitecture.map((d, i) => (
+                <div className="ds-block">
+                  <div className="ds-block-label-row">
+                    <span className="ds-block-label">🏛️ {lang === "tr" ? "Karar Mimarisi" : "Decision Architecture"}</span>
+                    <button type="button" className="edit-btn" onClick={() => { setEditingContentField("decisionArchitecture"); setContentDraft(getContent(selectedCode,"decisionArchitecture").join("\n")); }}><IcEdit /></button>
+                  </div>
+                  {editingContentField === "decisionArchitecture" ? (
+                    <>
+                      <textarea className="edit-textarea" rows={6} value={contentDraft} onChange={e => setContentDraft(e.target.value)} autoFocus />
+                      <div className="edit-actions">
+                        <button type="button" className="edit-save" onClick={() => { saveContentField(selectedCode,"decisionArchitecture",contentDraft.split("\n")); setEditingContentField(null); }}><IcCheck /> {t(lang,"save")}</button>
+                        <button type="button" className="edit-cancel" onClick={() => setEditingContentField(null)}>{t(lang,"cancel")}</button>
+                      </div>
+                    </>
+                  ) : getContent(selectedCode,"decisionArchitecture").length > 0 ? (
+                    getContent(selectedCode,"decisionArchitecture").map((d, i) => (
                       <div key={i} className="msg-item">
                         <span className="msg-bullet">▸</span>
                         <span className="msg-text">{translateStrategicText(d)}</span>
                       </div>
-                    ))}
-                  </div>
-                )}
+                    ))
+                  ) : (
+                    <div className="msg-item"><span className="msg-text" style={{ color:"var(--muted)", fontSize:12 }}>{lang === "tr" ? "Henüz veri yok — eklemek için düzenle." : "No data yet — edit to add."}</span></div>
+                  )}
+                </div>
 
                 {/* Strateji Adımları */}
                 <div className="ds-block">
-                  <div className="ds-block-label">⚡ {lang === "tr" ? "Taktik Adımlar" : "Strategic Moves"}</div>
-                  {buildStrategicMoves(selected).map((move, i) => (
-                    <div key={i} className="strat-move-row">
-                      <span className="strat-move-num">{i + 1}</span>
-                      <span className="strat-move-text">{move}</span>
-                    </div>
-                  ))}
+                  <div className="ds-block-label-row">
+                    <span className="ds-block-label">⚡ {lang === "tr" ? "Taktik Adımlar" : "Strategic Moves"}</span>
+                    <button type="button" className="edit-btn" onClick={() => { setEditingContentField("strategicMoves"); setContentDraft(getEditableComputed(selectedCode,"strategicMoves",buildStrategicMoves(selected)).join("\n")); }}><IcEdit /></button>
+                  </div>
+                  {editingContentField === "strategicMoves" ? (
+                    <>
+                      <textarea className="edit-textarea" rows={6} value={contentDraft} onChange={e => setContentDraft(e.target.value)} autoFocus />
+                      <div className="edit-actions">
+                        <button type="button" className="edit-save" onClick={() => { saveContentField(selectedCode,"strategicMoves",contentDraft.split("\n")); setEditingContentField(null); }}><IcCheck /> {t(lang,"save")}</button>
+                        <button type="button" className="edit-cancel" onClick={() => setEditingContentField(null)}>{t(lang,"cancel")}</button>
+                      </div>
+                    </>
+                  ) : (
+                    getEditableComputed(selectedCode,"strategicMoves",buildStrategicMoves(selected)).map((move, i) => (
+                      <div key={i} className="strat-move-row">
+                        <span className="strat-move-num">{i + 1}</span>
+                        <span className="strat-move-text">{move}</span>
+                      </div>
+                    ))
+                  )}
                 </div>
 
                 {/* Strateji Yolu */}
-                {(selected.strategyPath ?? []).length > 0 && (
-                  <div className="ds-block">
-                    <div className="ds-block-label">🗺️ {lang === "tr" ? "Strateji Yolu" : "Strategy Path"}</div>
-                    {selected.strategyPath.map((s, i) => (
+                <div className="ds-block">
+                  <div className="ds-block-label-row">
+                    <span className="ds-block-label">🗺️ {lang === "tr" ? "Strateji Yolu" : "Strategy Path"}</span>
+                    <button type="button" className="edit-btn" onClick={() => { setEditingContentField("strategyPath"); setContentDraft(getContent(selectedCode,"strategyPath").join("\n")); }}><IcEdit /></button>
+                  </div>
+                  {editingContentField === "strategyPath" ? (
+                    <>
+                      <textarea className="edit-textarea" rows={6} value={contentDraft} onChange={e => setContentDraft(e.target.value)} autoFocus />
+                      <div className="edit-actions">
+                        <button type="button" className="edit-save" onClick={() => { saveContentField(selectedCode,"strategyPath",contentDraft.split("\n")); setEditingContentField(null); }}><IcCheck /> {t(lang,"save")}</button>
+                        <button type="button" className="edit-cancel" onClick={() => setEditingContentField(null)}>{t(lang,"cancel")}</button>
+                      </div>
+                    </>
+                  ) : getContent(selectedCode,"strategyPath").length > 0 ? (
+                    getContent(selectedCode,"strategyPath").map((s, i) => (
                       <div key={i} className="msg-item">
                         <span className="msg-bullet">→</span>
                         <span className="msg-text">{translateStrategicText(s)}</span>
                       </div>
-                    ))}
-                  </div>
-                )}
+                    ))
+                  ) : (
+                    <div className="msg-item"><span className="msg-text" style={{ color:"var(--muted)", fontSize:12 }}>{lang === "tr" ? "Henüz veri yok — eklemek için düzenle." : "No data yet — edit to add."}</span></div>
+                  )}
+                </div>
 
                 {/* Yol haritası */}
                 <div className="ds-block" style={{ marginTop: 16 }}>
@@ -3162,38 +3205,77 @@ const AppMain = () => {
                 )}
 
                 {/* Beklentiler */}
-                {(selected.expectations ?? []).length > 0 && (
-                  <div className="ds-block">
-                    <div className="ds-block-label">📋 {lang === "tr" ? "Beklentiler" : "Expectations"}</div>
-                    {selected.expectations.map((ex, i) => (
+                <div className="ds-block">
+                  <div className="ds-block-label-row">
+                    <span className="ds-block-label">📋 {lang === "tr" ? "Beklentiler" : "Expectations"}</span>
+                    <button type="button" className="edit-btn" onClick={() => { setEditingContentField("expectations"); setContentDraft(getContent(selectedCode,"expectations").join("\n")); }}><IcEdit /></button>
+                  </div>
+                  {editingContentField === "expectations" ? (
+                    <>
+                      <textarea className="edit-textarea" rows={6} value={contentDraft} onChange={e => setContentDraft(e.target.value)} autoFocus />
+                      <div className="edit-actions">
+                        <button type="button" className="edit-save" onClick={() => { saveContentField(selectedCode,"expectations",contentDraft.split("\n")); setEditingContentField(null); }}><IcCheck /> {t(lang,"save")}</button>
+                        <button type="button" className="edit-cancel" onClick={() => setEditingContentField(null)}>{t(lang,"cancel")}</button>
+                      </div>
+                    </>
+                  ) : getContent(selectedCode,"expectations").length > 0 ? (
+                    getContent(selectedCode,"expectations").map((ex, i) => (
                       <div key={i} className="msg-item">
                         <span className="msg-bullet">•</span>
                         <span className="msg-text">{translateStrategicText(ex)}</span>
                       </div>
-                    ))}
-                  </div>
-                )}
+                    ))
+                  ) : (
+                    <div className="msg-item"><span className="msg-text" style={{ color:"var(--muted)", fontSize:12 }}>{lang === "tr" ? "Henüz veri yok — eklemek için düzenle." : "No data yet — edit to add."}</span></div>
+                  )}
+                </div>
 
                 {/* Mesaj Çerçevesi */}
                 <div className="ds-block">
-                  <div className="ds-block-label">🗣️ {lang === "tr" ? "Mesaj Çerçevesi" : "Message Framework"}</div>
-                  {buildMessageBullets(selected).map((b, i) => (
-                    <div key={i} className="msg-item">
-                      <span className="msg-bullet">◈</span>
-                      <span className="msg-text">{b}</span>
-                    </div>
-                  ))}
+                  <div className="ds-block-label-row">
+                    <span className="ds-block-label">🗣️ {lang === "tr" ? "Mesaj Çerçevesi" : "Message Framework"}</span>
+                    <button type="button" className="edit-btn" onClick={() => { setEditingContentField("messageBullets"); setContentDraft(getEditableComputed(selectedCode,"messageBullets",buildMessageBullets(selected)).join("\n")); }}><IcEdit /></button>
+                  </div>
+                  {editingContentField === "messageBullets" ? (
+                    <>
+                      <textarea className="edit-textarea" rows={6} value={contentDraft} onChange={e => setContentDraft(e.target.value)} autoFocus />
+                      <div className="edit-actions">
+                        <button type="button" className="edit-save" onClick={() => { saveContentField(selectedCode,"messageBullets",contentDraft.split("\n")); setEditingContentField(null); }}><IcCheck /> {t(lang,"save")}</button>
+                        <button type="button" className="edit-cancel" onClick={() => setEditingContentField(null)}>{t(lang,"cancel")}</button>
+                      </div>
+                    </>
+                  ) : (
+                    getEditableComputed(selectedCode,"messageBullets",buildMessageBullets(selected)).map((b, i) => (
+                      <div key={i} className="msg-item">
+                        <span className="msg-bullet">◈</span>
+                        <span className="msg-text">{b}</span>
+                      </div>
+                    ))
+                  )}
                 </div>
 
                 {/* Kanıt Maddeleri */}
                 <div className="ds-block">
-                  <div className="ds-block-label">✅ {lang === "tr" ? "Kanıt Noktaları" : "Proof Points"}</div>
-                  {buildProofBullets(selected).map((b, i) => (
-                    <div key={i} className="msg-item">
-                      <span className="msg-bullet">▸</span>
-                      <span className="msg-text">{b}</span>
-                    </div>
-                  ))}
+                  <div className="ds-block-label-row">
+                    <span className="ds-block-label">✅ {lang === "tr" ? "Kanıt Noktaları" : "Proof Points"}</span>
+                    <button type="button" className="edit-btn" onClick={() => { setEditingContentField("proofBullets"); setContentDraft(getEditableComputed(selectedCode,"proofBullets",buildProofBullets(selected)).join("\n")); }}><IcEdit /></button>
+                  </div>
+                  {editingContentField === "proofBullets" ? (
+                    <>
+                      <textarea className="edit-textarea" rows={6} value={contentDraft} onChange={e => setContentDraft(e.target.value)} autoFocus />
+                      <div className="edit-actions">
+                        <button type="button" className="edit-save" onClick={() => { saveContentField(selectedCode,"proofBullets",contentDraft.split("\n")); setEditingContentField(null); }}><IcCheck /> {t(lang,"save")}</button>
+                        <button type="button" className="edit-cancel" onClick={() => setEditingContentField(null)}>{t(lang,"cancel")}</button>
+                      </div>
+                    </>
+                  ) : (
+                    getEditableComputed(selectedCode,"proofBullets",buildProofBullets(selected)).map((b, i) => (
+                      <div key={i} className="msg-item">
+                        <span className="msg-bullet">▸</span>
+                        <span className="msg-text">{b}</span>
+                      </div>
+                    ))
+                  )}
                 </div>
               </>
             )}

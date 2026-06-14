@@ -91,6 +91,7 @@ export interface ContactLogEntry {
   summary: string;
   nextStep: string;
   objections?: string[];
+  linkedCountry?: string; // ilgili ülke kodu — karşı ülkenin dosyasında da görünür
 }
 
 export interface VisualDeckCard {

@@ -608,6 +608,7 @@ const AppMain = () => {
   const [contactSummary, setContactSummary] = useState("");
   const [contactNextStep, setContactNextStep] = useState("");
   const [contactObjections, setContactObjections] = useState<string[]>([]);
+  const [contactLinkedCountry, setContactLinkedCountry] = useState("");
 
   // Feature: Risk Register
   const [risks, setRisks] = useState<Record<string, any[]>>({});
@@ -827,6 +828,7 @@ const AppMain = () => {
       summary: contactSummary.trim(),
       nextStep: contactNextStep.trim(),
       ...(contactObjections.length > 0 ? { objections: contactObjections } : {}),
+      ...(contactLinkedCountry ? { linkedCountry: contactLinkedCountry } : {}),
     };
     const key = `${Date.now()}`;
     set(ref(db, `fig-v3/contactLogs/${selectedCode}/${key}`), entry);
@@ -834,6 +836,7 @@ const AppMain = () => {
     setContactSummary("");
     setContactNextStep("");
     setContactObjections([]);
+    setContactLinkedCountry("");
   };
   const deleteContactLog = (code: string, key: string) =>
     remove(ref(db, `fig-v3/contactLogs/${code}/${key}`));
@@ -3829,9 +3832,29 @@ const AppMain = () => {
                           ))}
                         </div>
                       </div>
+                      {/* İlgili ülke bağlantısı — seçilen ülkenin dosyasında da görünür */}
+                      <div style={{ marginTop:8 }}>
+                        <div style={{ fontSize:11, color:"var(--muted)", marginBottom:4 }}>
+                          🔗 {lang === "tr" ? "İlgili Ülke (opsiyonel) — bu temas o ülkenin dosyasında da görünür" : "Related Country (optional) — this contact also shows in that country's file"}
+                        </div>
+                        <select
+                          className="promise-select"
+                          value={contactLinkedCountry}
+                          onChange={e => setContactLinkedCountry(e.target.value)}
+                          style={{ width:"100%" }}
+                        >
+                          <option value="">{lang === "tr" ? "— Yok —" : "— None —"}</option>
+                          {[...federationSeeds]
+                            .filter(f => f.countryCode !== selectedCode)
+                            .sort((a,b) => trName(a).localeCompare(trName(b), lang === "tr" ? "tr" : "en"))
+                            .map(f => (
+                              <option key={f.countryCode} value={f.countryCode}>{trName(f)} ({f.countryCode})</option>
+                            ))}
+                        </select>
+                      </div>
                       <div style={{ display:"flex", gap:8, marginTop:6 }}>
                         <button className="note-submit" type="submit">{t(lang,"save")}</button>
-                        <button className="note-cancel" type="button" onClick={() => setShowContactForm(false)}>{t(lang,"cancel")}</button>
+                        <button className="note-cancel" type="button" onClick={() => { setShowContactForm(false); setContactLinkedCountry(""); }}>{t(lang,"cancel")}</button>
                       </div>
                     </form>
                   )}
@@ -3843,6 +3866,18 @@ const AppMain = () => {
                         <span className="log-channel">{l.channel}</span>
                         <span className="log-note">{l.summary}</span>
                         {l.nextStep && <span className="log-next">→ {l.nextStep}</span>}
+                        {l.linkedCountry && (() => {
+                          const lf = federationSeeds.find(f => f.countryCode === l.linkedCountry);
+                          return (
+                            <span
+                              onClick={() => openDossier(l.linkedCountry!)}
+                              style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize:10, fontWeight:700, background:"rgba(59,130,246,0.18)", color:"#60a5fa", borderRadius:5, padding:"2px 6px", cursor:"pointer", marginTop:3 }}
+                              title={lf ? trName(lf) : l.linkedCountry}
+                            >
+                              🔗 {flagEmoji(l.linkedCountry)} {l.linkedCountry}
+                            </span>
+                          );
+                        })()}
                       </div>
                     ))
                   ) : (
@@ -3850,6 +3885,45 @@ const AppMain = () => {
                       {lang === "tr" ? "Henüz temas kaydı yok." : "No contact history yet."}
                     </div>
                   )}
+
+                  {/* İlgili Temaslar — başka ülkelerden bu ülkeye bağlanan kayıtlar (otomatik/türetilmiş) */}
+                  {(() => {
+                    const incoming: { srcCode: string; entry: ContactLogEntry }[] = [];
+                    Object.entries(contactLogs).forEach(([srcCode, logs]) => {
+                      if (srcCode === selectedCode) return;
+                      logs.forEach(l => { if (l.linkedCountry === selectedCode) incoming.push({ srcCode, entry: l }); });
+                    });
+                    incoming.sort((a,b) => b.entry.date.localeCompare(a.entry.date));
+                    if (incoming.length === 0) return null;
+                    return (
+                      <div style={{ marginTop:14, paddingTop:12, borderTop:"1px solid var(--border)" }}>
+                        <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", letterSpacing:"0.05em", marginBottom:8 }}>
+                          🔗 {lang === "tr" ? "İLGİLİ TEMASLAR (başka ülkelerden)" : "RELATED CONTACTS (from other countries)"}
+                        </div>
+                        {incoming.map(({ srcCode, entry }, i) => {
+                          const sf = federationSeeds.find(f => f.countryCode === srcCode);
+                          return (
+                            <div key={i} style={{ background:"var(--surface2)", borderRadius:8, padding:"8px 10px", marginBottom:6 }}>
+                              <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:3 }}>
+                                <span
+                                  onClick={() => openDossier(srcCode)}
+                                  style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:12, fontWeight:700, color:"#60a5fa", cursor:"pointer" }}
+                                >
+                                  {flagEmoji(srcCode)} {sf ? trName(sf) : srcCode}
+                                </span>
+                                <span style={{ fontSize:10, color:"var(--muted)" }}>
+                                  → {trName(selected)} {lang === "tr" ? "ile ilgileniyor" : "is interested"}
+                                </span>
+                                <span style={{ fontSize:10, color:"var(--muted)", marginLeft:"auto" }}>{entry.date}</span>
+                              </div>
+                              <div style={{ fontSize:12, color:"var(--text)" }}>{entry.summary}</div>
+                              {entry.nextStep && <div style={{ fontSize:11, color:"var(--muted)", marginTop:2 }}>→ {entry.nextStep}</div>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* İlişki Ağı */}

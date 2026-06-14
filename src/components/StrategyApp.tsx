@@ -73,6 +73,7 @@ type CountryOverride = {
   entryChannel?: string;
   redLine?: string;
   presidentPhone?: string;
+  secretaryPhone?: string;
   commitmentLevel?: number;
   congressAttendance?: string;
   attendanceNote?: string;
@@ -569,6 +570,8 @@ const AppMain = () => {
   // President phone edit UI
   const [phoneEditCode, setPhoneEditCode] = useState<string | null>(null);
   const [phoneEditVal, setPhoneEditVal] = useState("");
+  const [secPhoneEditCode, setSecPhoneEditCode] = useState<string | null>(null);
+  const [secPhoneEditVal, setSecPhoneEditVal] = useState("");
 
   // Vote simulator
   const [conversionRate, setConversionRate] = useState(50);
@@ -3331,6 +3334,55 @@ const AppMain = () => {
                     </div>
                   </div>
                 )}
+
+                {/* Genel Sekreter kişisel telefonu */}
+                <div className="ds-block">
+                  <div className="ds-block-label-row">
+                    <span className="ds-block-label">{t(lang,"sec_phone_lbl")}</span>
+                    <button type="button" className="edit-btn" onClick={() => {
+                      setSecPhoneEditCode(selected.countryCode);
+                      setSecPhoneEditVal(overrides[selected.countryCode]?.secretaryPhone ?? "");
+                    }}><IcEdit /></button>
+                  </div>
+                  {secPhoneEditCode === selected.countryCode ? (
+                    <div>
+                      <input
+                        className="photo-edit-input"
+                        type="tel"
+                        placeholder={t(lang,"phone_placeholder")}
+                        value={secPhoneEditVal}
+                        onChange={e => setSecPhoneEditVal(e.target.value)}
+                        autoFocus
+                      />
+                      <div style={{ display:"flex", gap:8, marginTop:8 }}>
+                        <button type="button" className="note-submit" onClick={() => {
+                          setOverride(selected.countryCode, { secretaryPhone: secPhoneEditVal.trim() });
+                          setSecPhoneEditCode(null);
+                        }}>{t(lang,"save")}</button>
+                        <button type="button" className="note-cancel" onClick={() => setSecPhoneEditCode(null)}>{t(lang,"cancel")}</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="president-phone-row">
+                      {overrides[selected.countryCode]?.secretaryPhone ? (
+                        <>
+                          <span className="contact-main">{overrides[selected.countryCode].secretaryPhone}</span>
+                          <a
+                            className="whatsapp-btn"
+                            href={`https://wa.me/${(overrides[selected.countryCode].secretaryPhone ?? "").replace(/\D/g,"")}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={e => e.stopPropagation()}
+                          >
+                            <IcWhatsApp /> {t(lang,"whatsapp_btn")}
+                          </a>
+                        </>
+                      ) : (
+                        <span className="contact-empty">—</span>
+                      )}
+                    </div>
+                  )}
+                </div>
 
                 {selectedDir?.email && (
                   <div className="ds-block">

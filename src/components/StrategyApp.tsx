@@ -990,8 +990,42 @@ const AppMain = () => {
     relationshipOverrides[code] ?? (mergedByCode[code]?.relationshipNetwork ?? []);
   const saveRelationshipNetwork = (code: string, list: StrategicRelationship[]) => {
     const clean = list.filter(r => r.label.trim() || r.countryCode.trim());
+    // 1) Ana listeyi kaydet
     if (clean.length > 0) set(ref(db, `fig-v3/relationshipNetwork/${code}`), clean);
     else remove(ref(db, `fig-v3/relationshipNetwork/${code}`));
+
+    // 2) Karşılıklı (çift yönlü) senkron — yalnızca geçerli ülke kodu olan ilişkiler için
+    const validCodes = new Set(federationSeeds.map(f => f.countryCode));
+    const oldList = getRelationshipNetwork(code); // kayıttan önceki durum (Firebase snapshot)
+    const newTargets = clean.filter(r => validCodes.has(r.countryCode) && r.countryCode !== code);
+    const newTargetCodes = new Set(newTargets.map(r => r.countryCode));
+    const myName = COUNTRY_TR[code] ?? mergedByCode[code]?.countryName ?? code;
+
+    // 2a) Eklenen/güncellenen ilişkiler → karşı ülkeye karşılıklı kayıt yaz (upsert)
+    newTargets.forEach(entry => {
+      const otherCode = entry.countryCode;
+      const otherList = getRelationshipNetwork(otherCode);
+      const existing = otherList.find(r => r.countryCode === code);
+      let updated: StrategicRelationship[];
+      if (existing) {
+        // varsa türünü senkronla
+        updated = otherList.map(r => r.countryCode === code ? { ...r, kind: entry.kind } : r);
+      } else {
+        // yoksa ekle
+        updated = [...otherList, { countryCode: code, label: myName, kind: entry.kind, note: "" }];
+      }
+      set(ref(db, `fig-v3/relationshipNetwork/${otherCode}`), updated);
+    });
+
+    // 2b) Kaldırılan ilişkiler → karşı ülkeden de karşılıklı kaydı sil
+    const removedCodes = oldList
+      .filter(r => validCodes.has(r.countryCode) && r.countryCode !== code && !newTargetCodes.has(r.countryCode))
+      .map(r => r.countryCode);
+    removedCodes.forEach(otherCode => {
+      const otherList = getRelationshipNetwork(otherCode).filter(r => r.countryCode !== code);
+      if (otherList.length > 0) set(ref(db, `fig-v3/relationshipNetwork/${otherCode}`), otherList);
+      else remove(ref(db, `fig-v3/relationshipNetwork/${otherCode}`));
+    });
   };
 
   const openDossier = (code: string) => {
@@ -3967,6 +4001,11 @@ const AppMain = () => {
 
                   {editingRelationship ? (
                     <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                      <div style={{ fontSize:10, color:"var(--muted)", lineHeight:1.5, background:"rgba(74,222,128,0.08)", border:"1px solid rgba(74,222,128,0.25)", borderRadius:6, padding:"6px 8px" }}>
+                        🔄 {lang === "tr"
+                          ? "Geçerli bir ülke kodu (örn. UZB) girersen, ilişki karşı ülkeye de otomatik atanır. Silersen iki taraftan da kalkar."
+                          : "If you enter a valid country code (e.g. UZB), the relationship is auto-assigned to the other country too. Deleting removes it from both sides."}
+                      </div>
                       {relationshipDraft.map((rel, i) => (
                         <div key={i} style={{ background:"var(--surface2)", borderRadius:8, padding:"8px 10px", display:"flex", flexDirection:"column", gap:6 }}>
                           <div style={{ display:"flex", gap:6, alignItems:"center" }}>

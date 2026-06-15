@@ -982,6 +982,33 @@ const AppMain = () => {
   // İstihbarat alanları helper
   const getDiplomaticAllies = (code: string): string[] =>
     contentOverrides[code]?.diplomaticAllies ?? (mergedByCode[code]?.diplomaticAllies ?? []);
+
+  // Diplomatik Müttefikler — geçerli ülke kodları için karşılıklı (çift yönlü) senkron
+  const saveDiplomaticAllies = (code: string, list: string[]) => {
+    const clean = list.map(s => s.trim()).filter(Boolean);
+    const validCodes = new Set(federationSeeds.map(f => f.countryCode));
+    const asCode = (s: string) => s.trim().toUpperCase();
+    const oldList = getDiplomaticAllies(code); // kayıttan önceki durum
+    // Ana listeyi kaydet
+    saveContentField(code, "diplomaticAllies", clean);
+
+    const newValid = clean.filter(s => validCodes.has(asCode(s)) && asCode(s) !== code).map(asCode);
+    const oldValid = oldList.filter(s => validCodes.has(asCode(s)) && asCode(s) !== code).map(asCode);
+    const newSet = new Set(newValid);
+
+    // Listedeki TÜM geçerli kodlar için karşı tarafta bu ülkeyi garanti et (idempotent — asimetrik veriyi de düzeltir)
+    newValid.forEach(otherCode => {
+      const otherList = getDiplomaticAllies(otherCode);
+      if (!otherList.some(s => asCode(s) === code)) {
+        saveContentField(otherCode, "diplomaticAllies", [...otherList, code]);
+      }
+    });
+    // Kaldırılan kodlar → karşı ülkeden bu ülkeyi sil
+    oldValid.filter(c => !newSet.has(c)).forEach(otherCode => {
+      const otherList = getDiplomaticAllies(otherCode).filter(s => asCode(s) !== code);
+      saveContentField(otherCode, "diplomaticAllies", otherList);
+    });
+  };
   const getFrictionPoints = (code: string): string[] =>
     contentOverrides[code]?.frictionPoints ?? (mergedByCode[code]?.frictionPoints ?? []);
 
@@ -4194,10 +4221,15 @@ const AppMain = () => {
                   </div>
                   {editingContentField === "diplomaticAllies" ? (
                     <>
-                      <textarea className="edit-textarea" rows={3} value={contentDraft} onChange={e => setContentDraft(e.target.value)} placeholder="Virgülle ayırarak girin…" autoFocus />
+                      <div style={{ fontSize:10, color:"var(--muted)", lineHeight:1.5, background:"rgba(74,222,128,0.08)", border:"1px solid rgba(74,222,128,0.25)", borderRadius:6, padding:"6px 8px", marginBottom:6 }}>
+                        🔄 {lang === "tr"
+                          ? "3 harfli ülke kodu (örn. CPV, BEN) girersen o ülkeye de otomatik karşılıklı eklenir. Virgülle ayır."
+                          : "Enter 3-letter country codes (e.g. CPV, BEN) — they auto-link reciprocally. Separate with commas."}
+                      </div>
+                      <textarea className="edit-textarea" rows={3} value={contentDraft} onChange={e => setContentDraft(e.target.value)} placeholder={lang === "tr" ? "Örn: CPV, BEN, MAR — virgülle ayır…" : "e.g. CPV, BEN, MAR — comma-separated…"} autoFocus />
                       <div className="edit-actions">
-                        <button type="button" className="edit-save" onClick={() => { saveContentField(selectedCode,"diplomaticAllies",contentDraft.split(",").map(s=>s.trim()).filter(Boolean)); setEditingContentField(null); }}><IcCheck /> Kaydet</button>
-                        <button type="button" className="edit-cancel" onClick={() => setEditingContentField(null)}>İptal</button>
+                        <button type="button" className="edit-save" onClick={() => { saveDiplomaticAllies(selectedCode, contentDraft.split(",")); setEditingContentField(null); }}><IcCheck /> {t(lang,"save")}</button>
+                        <button type="button" className="edit-cancel" onClick={() => setEditingContentField(null)}>{t(lang,"cancel")}</button>
                       </div>
                     </>
                   ) : (

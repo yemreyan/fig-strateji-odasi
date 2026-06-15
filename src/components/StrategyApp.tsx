@@ -52,6 +52,7 @@ import type {
   FigPromise,
   PromiseCategory,
   PromiseStatus,
+  StrategicRelationship,
   SupportStatus
 } from "../types";
 
@@ -595,6 +596,11 @@ const AppMain = () => {
   // Status history — synced from Firebase
   const [statusHistory, setStatusHistory] = useState<Record<string,{from:string,to:string,date:string}[]>>({});
 
+  // İlişki Ağı (relationshipNetwork) — Firebase override + düzenleme
+  const [relationshipOverrides, setRelationshipOverrides] = useState<Record<string, StrategicRelationship[]>>({});
+  const [editingRelationship, setEditingRelationship] = useState(false);
+  const [relationshipDraft, setRelationshipDraft] = useState<StrategicRelationship[]>([]);
+
   // Competitor analysis
   const [competitor, setCompetitor] = useState<{name:string, knownSupporters:string[], estimatedVotes:number} | null>(null);
   const [editingCompetitor, setEditingCompetitor] = useState(false);
@@ -709,6 +715,20 @@ const AppMain = () => {
       setCompetitor(snap.val() || null);
     });
     return compUnsub;
+  }, []);
+
+  useEffect(() => {
+    const relUnsub = onValue(ref(db, "fig-v3/relationshipNetwork"), snap => {
+      const val = snap.val();
+      if (!val || typeof val !== "object") { setRelationshipOverrides({}); return; }
+      // Firebase boş array'leri stripler — her ülkenin listesini normalize et
+      const result: Record<string, StrategicRelationship[]> = {};
+      for (const [code, list] of Object.entries(val)) {
+        result[code] = Array.isArray(list) ? (list as StrategicRelationship[]) : Object.values(list as any);
+      }
+      setRelationshipOverrides(result);
+    });
+    return relUnsub;
   }, []);
 
   useEffect(() => {
@@ -965,10 +985,20 @@ const AppMain = () => {
   const getFrictionPoints = (code: string): string[] =>
     contentOverrides[code]?.frictionPoints ?? (mergedByCode[code]?.frictionPoints ?? []);
 
+  // İlişki Ağı — override varsa onu, yoksa seed verisini döner
+  const getRelationshipNetwork = (code: string): StrategicRelationship[] =>
+    relationshipOverrides[code] ?? (mergedByCode[code]?.relationshipNetwork ?? []);
+  const saveRelationshipNetwork = (code: string, list: StrategicRelationship[]) => {
+    const clean = list.filter(r => r.label.trim() || r.countryCode.trim());
+    if (clean.length > 0) set(ref(db, `fig-v3/relationshipNetwork/${code}`), clean);
+    else remove(ref(db, `fig-v3/relationshipNetwork/${code}`));
+  };
+
   const openDossier = (code: string) => {
     setSelectedCode(code);
     setDossierTab("genel");
     setShowScoreInfo(false);
+    setEditingRelationship(false);
     setSheet("dossier");
   };
 
@@ -3926,29 +3956,91 @@ const AppMain = () => {
                   })()}
                 </div>
 
-                {/* İlişki Ağı */}
-                {(selected.relationshipNetwork ?? []).length > 0 && (
-                  <div className="ds-block">
-                    <div className="ds-block-label">🕸️ {lang === "tr" ? "İlişki Ağı" : "Relationship Network"}</div>
-                    {selected.relationshipNetwork.map((rel, i) => (
+                {/* İlişki Ağı — düzenlenebilir CRUD */}
+                <div className="ds-block">
+                  <div className="ds-block-label-row">
+                    <span className="ds-block-label">🕸️ {lang === "tr" ? "İlişki Ağı (Müttefikler)" : "Relationship Network (Allies)"}</span>
+                    {!editingRelationship && (
+                      <button type="button" className="edit-btn" onClick={() => { setRelationshipDraft(getRelationshipNetwork(selectedCode).map(r => ({...r}))); setEditingRelationship(true); }}><IcEdit /></button>
+                    )}
+                  </div>
+
+                  {editingRelationship ? (
+                    <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                      {relationshipDraft.map((rel, i) => (
+                        <div key={i} style={{ background:"var(--surface2)", borderRadius:8, padding:"8px 10px", display:"flex", flexDirection:"column", gap:6 }}>
+                          <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+                            <select
+                              value={rel.kind}
+                              onChange={e => setRelationshipDraft(prev => prev.map((r,idx) => idx===i ? {...r, kind: e.target.value as StrategicRelationship["kind"]} : r))}
+                              style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:6, padding:"4px 6px", color:"var(--text)", fontSize:11, fontWeight:700, cursor:"pointer" }}
+                            >
+                              <option value="ally">🤝 {lang === "tr" ? "Müttefik" : "Ally"}</option>
+                              <option value="swing">↔️ {lang === "tr" ? "Sallanır" : "Swing"}</option>
+                              <option value="competitive">⚔️ {lang === "tr" ? "Rakip" : "Rival"}</option>
+                            </select>
+                            <input
+                              type="text"
+                              value={rel.countryCode}
+                              onChange={e => setRelationshipDraft(prev => prev.map((r,idx) => idx===i ? {...r, countryCode: e.target.value.toUpperCase()} : r))}
+                              placeholder={lang === "tr" ? "Kod" : "Code"}
+                              style={{ width:60, background:"var(--surface)", border:"1px solid var(--border)", borderRadius:6, padding:"4px 6px", color:"var(--accent)", fontSize:11, fontWeight:700, textAlign:"center" }}
+                            />
+                            <button type="button" onClick={() => setRelationshipDraft(prev => prev.filter((_,idx) => idx!==i))} style={{ marginLeft:"auto", background:"transparent", border:"none", cursor:"pointer", fontSize:13, color:"var(--muted)" }} title={lang === "tr" ? "Sil" : "Delete"}>✕</button>
+                          </div>
+                          <input
+                            type="text"
+                            value={rel.label}
+                            onChange={e => setRelationshipDraft(prev => prev.map((r,idx) => idx===i ? {...r, label: e.target.value} : r))}
+                            placeholder={lang === "tr" ? "Etiket (örn: continuity-minded Asian desks)" : "Label"}
+                            style={{ width:"100%", background:"var(--surface)", border:"1px solid var(--border)", borderRadius:6, padding:"5px 8px", color:"var(--text)", fontSize:12, boxSizing:"border-box" }}
+                          />
+                          <input
+                            type="text"
+                            value={rel.note}
+                            onChange={e => setRelationshipDraft(prev => prev.map((r,idx) => idx===i ? {...r, note: e.target.value} : r))}
+                            placeholder={lang === "tr" ? "Not (opsiyonel)" : "Note (optional)"}
+                            style={{ width:"100%", background:"var(--surface)", border:"1px solid var(--border)", borderRadius:6, padding:"5px 8px", color:"var(--muted)", fontSize:11, boxSizing:"border-box" }}
+                          />
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setRelationshipDraft(prev => [...prev, { countryCode:"", label:"", kind:"ally", note:"" }])}
+                        style={{ background:"var(--surface2)", border:"1px dashed var(--border)", borderRadius:8, padding:"8px", fontSize:12, color:"var(--accent)", cursor:"pointer", fontWeight:600 }}
+                      >
+                        + {lang === "tr" ? "İlişki Ekle" : "Add Relationship"}
+                      </button>
+                      <div style={{ display:"flex", gap:8 }}>
+                        <button type="button" className="edit-save" onClick={() => { saveRelationshipNetwork(selectedCode, relationshipDraft); setEditingRelationship(false); }}><IcCheck /> {t(lang,"save")}</button>
+                        <button type="button" className="edit-cancel" onClick={() => setEditingRelationship(false)}>{t(lang,"cancel")}</button>
+                      </div>
+                    </div>
+                  ) : getRelationshipNetwork(selectedCode).length > 0 ? (
+                    getRelationshipNetwork(selectedCode).map((rel, i) => (
                       <div key={i} className="rel-network-row">
                         <span className={`rel-kind rel-kind-${rel.kind}`}>
                           {rel.kind === "ally" ? (lang === "tr" ? "Müttefik" : "Ally") :
                            rel.kind === "swing" ? (lang === "tr" ? "Sallanır" : "Swing") :
                            (lang === "tr" ? "Rakip" : "Rival")}
                         </span>
+                        {rel.countryCode && <span style={{ fontSize:11, fontWeight:700, color:"var(--accent)" }}>{rel.countryCode}</span>}
                         <span className="rel-label">{rel.label}</span>
                         {rel.note && <span className="rel-note">{translateStrategicText(rel.note)}</span>}
                       </div>
-                    ))}
-                  </div>
-                )}
+                    ))
+                  ) : (
+                    <div className="empty-state" style={{ fontSize:12, padding:"8px 0" }}>
+                      {lang === "tr" ? "Henüz müttefik/ilişki yok — eklemek için düzenle." : "No relationships yet — edit to add."}
+                    </div>
+                  )}
+                </div>
 
-                {/* FEATURE 6: Etki Ağı */}
-                {(selected.relationshipNetwork ?? []).length > 0 && (
+                {/* FEATURE 6: Etki Ağı — İlişki Ağı ile senkron */}
+                {getRelationshipNetwork(selectedCode).length > 0 && (
                   <div style={{ marginTop:16 }}>
                     <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", marginBottom:10, letterSpacing:"0.05em" }}>{t(lang,"influence_network")}</div>
-                    {selected.relationshipNetwork.map((rel, i) => {
+                    {getRelationshipNetwork(selectedCode).map((rel, i) => {
                       const kindColors: Record<string,string> = {ally:"#4ade80", swing:"#fbbf24", competitive:"#f87171"};
                       const kindLabels: Record<string,string> = {ally:t(lang,"rel_ally"), swing:t(lang,"rel_swing"), competitive:t(lang,"rel_competitive")};
                       return (
@@ -3956,7 +4048,7 @@ const AppMain = () => {
                           <span style={{ fontSize:11, fontWeight:700, color:kindColors[rel.kind]||"var(--muted)", minWidth:110 }}>
                             {kindLabels[rel.kind]||rel.kind}
                           </span>
-                          <span style={{ fontSize:12, fontWeight:700, color:"var(--accent)", minWidth:36 }}>{rel.countryCode}</span>
+                          {rel.countryCode && <span style={{ fontSize:12, fontWeight:700, color:"var(--accent)", minWidth:36 }}>{rel.countryCode}</span>}
                           {rel.label && <span style={{ fontSize:11, color:"var(--text)", flex:1 }}>{rel.label}</span>}
                           {rel.note && <span style={{ fontSize:10, color:"var(--muted)" }}>{rel.note}</span>}
                         </div>

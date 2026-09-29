@@ -29,7 +29,9 @@ export const strings: Record<Lang, Record<string, string>> = {
     status_watch:       "İzle",
     status_persuadable: "İkna Edilebilir",
     status_resistant:   "Dirençli",
+    status_absent:      "Katılmayacak",
     status_all:         "Tümü",
+    eligible_lbl:       "Oy kullanacak",
 
     // Continents
     continent_EG:   "Avrupa",
@@ -367,7 +369,9 @@ export const strings: Record<Lang, Record<string, string>> = {
     status_watch:       "Watch",
     status_persuadable: "Persuadable",
     status_resistant:   "Resistant",
+    status_absent:      "Not Attending",
     status_all:         "All",
+    eligible_lbl:       "Eligible",
 
     // Continents
     continent_EG:   "Europe",

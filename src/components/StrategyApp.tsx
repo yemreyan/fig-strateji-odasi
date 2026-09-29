@@ -320,13 +320,15 @@ const STATUS_CSS: Record<SupportStatus, string> = {
   supporter: "badge-green",
   watch: "badge-amber",
   persuadable: "badge-blue",
-  resistant: "badge-red"
+  resistant: "badge-red",
+  absent: "badge-slate"
 };
 const MAP_COLOR: Record<SupportStatus, string> = {
   supporter: "#10D9A0",
   watch: "#F59E0B",
   persuadable: "#3B82F6",   // daha koyu, net mavi
-  resistant: "#EF4444"       // net kırmızı (pembe değil)
+  resistant: "#EF4444",      // net kırmızı (pembe değil)
+  absent: "#64748b"          // gri — oy havuzunda değil (katılmayacak)
 };
 
 // ── Branş yapısı ──────────────────────────────────────────────────────
@@ -911,7 +913,7 @@ const AppMain = () => {
 
   // Status ağırlıkları (priorityScore yeniden hesaplamak için)
   const STATUS_WEIGHT: Record<SupportStatus, number> = {
-    supporter: 18, watch: 50, persuadable: 84, resistant: 12
+    supporter: 18, watch: 50, persuadable: 84, resistant: 12, absent: 0
   };
 
   // Merged country with overrides applied + priority score recalculation
@@ -940,14 +942,20 @@ const AppMain = () => {
     return true;
   }), [mergedSeed, statusFilter, continentFilter, dSearch]);
 
-  // Vote totals (from merged)
-  const totals = useMemo(() => ({
-    supporter: mergedSeed.filter(c => c.status === "supporter").length,
-    watch: mergedSeed.filter(c => c.status === "watch").length,
-    persuadable: mergedSeed.filter(c => c.status === "persuadable").length,
-    resistant: mergedSeed.filter(c => c.status === "resistant").length,
-    total: mergedSeed.length,
-  }), [mergedSeed]);
+  // Vote totals (from merged) — "absent" (katılmayacak) oy havuzundan düşülür
+  const totals = useMemo(() => {
+    const absent = mergedSeed.filter(c => c.status === "absent").length;
+    const total = mergedSeed.length;
+    return {
+      supporter: mergedSeed.filter(c => c.status === "supporter").length,
+      watch: mergedSeed.filter(c => c.status === "watch").length,
+      persuadable: mergedSeed.filter(c => c.status === "persuadable").length,
+      resistant: mergedSeed.filter(c => c.status === "resistant").length,
+      absent,
+      total,
+      eligible: total - absent, // oy kullanacak (çoğunluk ve oranlar bunun üzerinden)
+    };
+  }, [mergedSeed]);
 
   const statusByNumeric = useMemo(() => {
     const map: Record<string, SupportStatus> = {};
@@ -1082,13 +1090,14 @@ const AppMain = () => {
   const toggleNoteComplete = (id: string, completed: boolean) => update(ref(db, `fig-v3/notes/${id}`), { completed });
   const countryNotes = notes.filter(n => n.countryCode === selectedCode);
 
-  const majority = Math.ceil(totals.total / 2) + 1;
+  // Çoğunluk = oy kullanacak (eligible) ülkelerin yarısı + 1
+  const majority = Math.ceil(totals.eligible / 2) + 1;
 
-  // Continent summaries from merged data (all 4 statuses)
+  // Continent summaries from merged data (5 statuses; absent = katılmayacak)
   const continentStats = useMemo(() => {
-    const map: Record<string, { total: number; supporter: number; watch: number; persuadable: number; resistant: number }> = {};
+    const map: Record<string, { total: number; supporter: number; watch: number; persuadable: number; resistant: number; absent: number }> = {};
     for (const c of mergedSeed) {
-      if (!map[c.continent]) map[c.continent] = { total: 0, supporter: 0, watch: 0, persuadable: 0, resistant: 0 };
+      if (!map[c.continent]) map[c.continent] = { total: 0, supporter: 0, watch: 0, persuadable: 0, resistant: 0, absent: 0 };
       map[c.continent].total++;
       map[c.continent][c.status]++;
     }
@@ -1362,18 +1371,22 @@ const AppMain = () => {
               <h2 className="section-title">{t(lang,"vote_title")}</h2>
               <div className="vote-progress-card">
                 <div className="vote-big">{totals.supporter} <span>{t(lang,"vote_supporter")}</span></div>
-                <div className="vote-goal">{t(lang,"hdr_goal")}: {majority} · {t(lang,"hdr_total")}: {totals.total}</div>
+                <div className="vote-goal">
+                  {t(lang,"hdr_goal")}: {majority} · {t(lang,"hdr_total")}: {totals.total}
+                  {totals.absent > 0 && <> · <span style={{ color:"#94a3b8" }}>{t(lang,"status_absent")}: {totals.absent} → {t(lang,"eligible_lbl")}: {totals.eligible}</span></>}
+                </div>
                 <div className="progress-track">
-                  <div className="progress-fill green" style={{ width: `${(totals.supporter/totals.total)*100}%` }} />
-                  <div className="progress-fill blue"  style={{ width: `${(totals.persuadable/totals.total)*100}%` }} />
-                  <div className="progress-fill amber" style={{ width: `${(totals.watch/totals.total)*100}%` }} />
-                  <div className="progress-fill red"   style={{ width: `${(totals.resistant/totals.total)*100}%` }} />
+                  <div className="progress-fill green" style={{ width: `${(totals.supporter/totals.eligible)*100}%` }} />
+                  <div className="progress-fill blue"  style={{ width: `${(totals.persuadable/totals.eligible)*100}%` }} />
+                  <div className="progress-fill amber" style={{ width: `${(totals.watch/totals.eligible)*100}%` }} />
+                  <div className="progress-fill red"   style={{ width: `${(totals.resistant/totals.eligible)*100}%` }} />
                 </div>
                 <div className="vote-legend">
                   <span className="dot green"/><b>{totals.supporter}</b> {t(lang,"status_supporter")}
                   <span className="dot blue"/><b>{totals.persuadable}</b> {t(lang,"status_persuadable")}
                   <span className="dot amber"/><b>{totals.watch}</b> {t(lang,"status_watch")}
                   <span className="dot red"/><b>{totals.resistant}</b> {t(lang,"status_resistant")}
+                  {totals.absent > 0 && <><span className="dot slate"/><b>{totals.absent}</b> {t(lang,"status_absent")}</>}
                 </div>
 
                 {/* FEATURE 1: Gerçek Taahhüt Dağılımı */}
@@ -1496,7 +1509,8 @@ const AppMain = () => {
                 const meta = continentMeta[code];
                 const s = continentStats[code];
                 if (!s) return null;
-                const pct = s.total > 0 ? Math.round((s.supporter / s.total) * 100) : 0;
+                const eligibleC = s.total - s.absent;
+                const pct = eligibleC > 0 ? Math.round((s.supporter / eligibleC) * 100) : 0;
                 const accent = meta.accent;
                 return (
                   <div
@@ -1515,6 +1529,7 @@ const AppMain = () => {
                           <span className="cs-blue">◈ {s.persuadable}</span>
                           <span className="cs-amber">◎ {s.watch}</span>
                           <span className="cs-red">✕ {s.resistant}</span>
+                          {s.absent > 0 && <span className="cs-slate">⊘ {s.absent}</span>}
                         </div>
                       </div>
                     </div>
@@ -1542,9 +1557,9 @@ const AppMain = () => {
                 </div>
                 <div className="sim-bar-wrap">
                   <div className="progress-track">
-                    <div className="progress-fill green" style={{ width: `${Math.min((projected / totals.total) * 100, 100)}%` }} />
+                    <div className="progress-fill green" style={{ width: `${Math.min((projected / totals.eligible) * 100, 100)}%` }} />
                   </div>
-                  <div className="sim-pct">{Math.round((projected / totals.total) * 100)}%</div>
+                  <div className="sim-pct">{Math.round((projected / totals.eligible) * 100)}%</div>
                 </div>
                 <div className="sim-detail">
                   <span>{lang === "tr" ? "İkna edilebilir" : "Persuadable"}: <b>{totals.persuadable}</b></span>
@@ -1619,7 +1634,8 @@ const AppMain = () => {
                     });
                     const base = federationSeeds.filter((f:any) => (overrides[f.countryCode]?.status || f.status) === "supporter").length;
                     const total = base + extraVotes;
-                    const maj = Math.ceil(federationSeeds.length / 2) + 1;
+                    const absentCount = federationSeeds.filter((f:any) => (overrides[f.countryCode]?.status || f.status) === "absent").length;
+                    const maj = Math.ceil((federationSeeds.length - absentCount) / 2) + 1;
                     return (
                       <div style={{ marginTop:10, padding:"10px 12px", background: total >= maj ? "rgba(16,163,127,0.12)" : "rgba(239,68,68,0.08)", border:`1px solid ${total >= maj ? "rgba(16,163,127,0.4)" : "rgba(239,68,68,0.3)"}`, borderRadius:8, textAlign:"center" }}>
                         <div style={{ fontSize:22, fontWeight:800, color: total >= maj ? "#10a37f" : "#f87171" }}>{total}</div>
@@ -1709,7 +1725,7 @@ const AppMain = () => {
             </ComposableMap>
 
             <div className="map-legend">
-              {(["supporter","persuadable","watch","resistant"] as SupportStatus[]).map(s => (
+              {(["supporter","persuadable","watch","resistant","absent"] as SupportStatus[]).map(s => (
                 <div key={s} className="map-legend-item">
                   <span className="map-legend-dot" style={{ background: MAP_COLOR[s] }} />
                   <span>{t(lang,`status_${s}`)}</span>
@@ -1757,7 +1773,7 @@ const AppMain = () => {
             </div>
 
             <div className="filter-pills">
-              {(["all","supporter","persuadable","watch","resistant"] as (FilterValue<SupportStatus>)[]).map(s => (
+              {(["all","supporter","persuadable","watch","resistant","absent"] as (FilterValue<SupportStatus>)[]).map(s => (
                 <button key={s} type="button" className={`pill ${statusFilter===s?"pill-active":""}`}
                   onClick={() => setStatusFilter(s)}>
                   {s === "all" ? t(lang,"status_all") : t(lang,`status_${s}`)}
@@ -2834,7 +2850,7 @@ const AppMain = () => {
 
           {/* Status changer */}
           <div className="ds-status-row">
-            {(["supporter","persuadable","watch","resistant"] as SupportStatus[]).map(s => (
+            {(["supporter","persuadable","watch","resistant","absent"] as SupportStatus[]).map(s => (
               <button
                 key={s}
                 type="button"

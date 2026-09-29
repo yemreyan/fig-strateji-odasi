@@ -4,7 +4,8 @@ export type SupportStatus =
   | "supporter"
   | "watch"
   | "persuadable"
-  | "resistant";
+  | "resistant"
+  | "absent";
 
 export type PrimaryNeed =
   | "continuity"

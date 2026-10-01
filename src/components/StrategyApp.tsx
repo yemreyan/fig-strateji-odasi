@@ -1090,8 +1090,9 @@ const AppMain = () => {
   const toggleNoteComplete = (id: string, completed: boolean) => update(ref(db, `fig-v3/notes/${id}`), { completed });
   const countryNotes = notes.filter(n => n.countryCode === selectedCode);
 
-  // Çoğunluk = oy kullanacak (eligible) ülkelerin yarısı + 1
-  const majority = Math.ceil(totals.eligible / 2) + 1;
+  // Salt çoğunluk = oy kullanacak (eligible) ülkelerin yarısından bir fazla = floor(N/2) + 1
+  // (Math.ceil tek sayılarda 1 fazla verir — floor doğru olanı)
+  const majority = Math.floor(totals.eligible / 2) + 1;
 
   // Continent summaries from merged data (5 statuses; absent = katılmayacak)
   const continentStats = useMemo(() => {
@@ -1635,7 +1636,7 @@ const AppMain = () => {
                     const base = federationSeeds.filter((f:any) => (overrides[f.countryCode]?.status || f.status) === "supporter").length;
                     const total = base + extraVotes;
                     const absentCount = federationSeeds.filter((f:any) => (overrides[f.countryCode]?.status || f.status) === "absent").length;
-                    const maj = Math.ceil((federationSeeds.length - absentCount) / 2) + 1;
+                    const maj = Math.floor((federationSeeds.length - absentCount) / 2) + 1;
                     return (
                       <div style={{ marginTop:10, padding:"10px 12px", background: total >= maj ? "rgba(16,163,127,0.12)" : "rgba(239,68,68,0.08)", border:`1px solid ${total >= maj ? "rgba(16,163,127,0.4)" : "rgba(239,68,68,0.3)"}`, borderRadius:8, textAlign:"center" }}>
                         <div style={{ fontSize:22, fontWeight:800, color: total >= maj ? "#10a37f" : "#f87171" }}>{total}</div>
